@@ -63,7 +63,8 @@ def evaluate(test_csvs, create_model, try_loading):
     logits, _ = create_model(batch_x=batch_x,
                              batch_size=FLAGS.test_batch_size,
                              seq_length=batch_x_len,
-                             dropout=no_dropout)
+                             dropout=no_dropout,
+                             ignore_longer_outputs_than_inputs=True)
 
     # Transpose to batch major and apply softmax for decoder
     transposed = tf.nn.softmax(tf.transpose(a=logits, perm=[1, 0, 2]))
