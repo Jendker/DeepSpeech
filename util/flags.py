@@ -119,6 +119,7 @@ def create_flags():
     # Geometry
 
     f.DEFINE_integer('n_hidden', 2048, 'layer width to use when initialising layers')
+    f.DEFINE_integer('n_input', 26, 'MFCC features to use')
 
     # Initialization
 
