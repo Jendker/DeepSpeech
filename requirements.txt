@@ -25,3 +25,6 @@ soundfile
 paramiko >= 2.1
 scipy
 matplotlib
+
+# My
+pydub
