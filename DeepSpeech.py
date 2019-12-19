@@ -854,8 +854,8 @@ def export():
     # Create a saver using variables from the above newly created graph
     saver = tfv1.train.Saver()
 
-    # Restore variables from training checkpoint
-    checkpoint = tf.train.get_checkpoint_state(FLAGS.checkpoint_dir)
+    # Restore variables from checkpoint with lowest validation loss
+    checkpoint = tf.train.get_checkpoint_state(FLAGS.checkpoint_dir, 'best_dev_checkpoint')
     checkpoint_path = checkpoint.model_checkpoint_path
 
     output_filename = 'output_graph.pb'
