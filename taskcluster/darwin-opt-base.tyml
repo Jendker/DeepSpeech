@@ -37,11 +37,7 @@ payload:
   maxRunTime: { $eval: to_int(build.maxRunTime) }
 
   env:
-    $let:
-      training: { $eval: as_slugid("test-training_upstream-linux-amd64-py36m-opt") }
-    in:
-      TENSORFLOW_BUILD_ARTIFACT: ${build.tensorflow}
-      DEEPSPEECH_TEST_MODEL: https://community-tc.services.mozilla.com/api/queue/v1/task/${training}/artifacts/public/output_graph.pb
+    TENSORFLOW_BUILD_ARTIFACT: ${build.tensorflow}
 
   # There is no VM yet running tasks on OSX
   # so one should install by hand:
@@ -102,6 +98,7 @@ payload:
         cd $TASKCLUSTER_TASK_DIR/DeepSpeech/ds && git checkout --quiet ${event.head.sha} &&
         ln -s $TASKCLUSTER_TASK_DIR/DeepSpeech/ds/native_client/ $TASKCLUSTER_TASK_DIR/DeepSpeech/tf/native_client &&
         cd $TASKCLUSTER_TASK_DIR &&
+        sed -i '' -e 's/node@8/node@10/g' $TASKCLUSTER_TASK_DIR/DeepSpeech/tf/tc-brew.sh &&
         $TASKCLUSTER_TASK_DIR/DeepSpeech/tf/tc-brew.sh &&
         $TASKCLUSTER_TASK_DIR/homebrew/bin/brew reinstall swig &&
         ${swig.patch_nodejs.osx_v12} &&
