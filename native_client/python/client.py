@@ -18,8 +18,11 @@ try:
 except ImportError:
     from pipes import quote
 
-def convert_samplerate(audio_path, desired_sample_rate):
-    sox_cmd = 'sox {} --type raw --bits 16 --channels 1 --rate {} --encoding signed-integer --endian little --compression 0.0 --no-dither - '.format(quote(audio_path), desired_sample_rate)
+def convert_samplerate(audio_path, desired_sample_rate, get_first_channel=False):
+    channel_string = ''
+    if get_first_channel:
+        channel_string = ' remix 1 '
+    sox_cmd = 'sox {} --type raw --bits 16 --channels 1 --rate {} --encoding signed-integer --endian little --compression 0.0 --no-dither - '.format(quote(audio_path), desired_sample_rate) + channel_string
     try:
         output = subprocess.check_output(shlex.split(sox_cmd), stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
@@ -28,7 +31,6 @@ def convert_samplerate(audio_path, desired_sample_rate):
         raise OSError(e.errno, 'SoX not found, use {}hz files or install it: {}'.format(desired_sample_rate, e.strerror))
 
     return desired_sample_rate, np.frombuffer(output, np.int16)
-
 
 def metadata_to_string(metadata):
     return ''.join(item.character for item in metadata.items)
@@ -72,7 +74,14 @@ def metadata_json_output(metadata):
     json_result["words"] = words_from_metadata(metadata)
     json_result["confidence"] = metadata.confidence
     return json.dumps(json_result)
-	
+
+
+def output(string_to_output, output_to_file, audio_path):
+    if output_to_file:
+        with open(audio_path[:-3] + "txt", 'w') as f:
+            f.write(string_to_output + "\n")
+    else:
+        print(string_to_output)
 
 
 class VersionAction(argparse.Action):
@@ -106,6 +115,8 @@ def main():
                         help='Output string from extended metadata')
     parser.add_argument('--json', required=False, action='store_true',
                         help='Output json from metadata with timestamp of each word')
+    parser.add_argument('--output_file', required=False, action='store_true',
+                        help='Will output to .txt file in the same place as the audio file.')
     args = parser.parse_args()
 
     print('Loading model from file {}'.format(args.model), file=sys.stderr)
@@ -125,7 +136,10 @@ def main():
 
     fin = wave.open(args.audio, 'rb')
     fs = fin.getframerate()
-    if fs != desired_sample_rate:
+    if fin.getnchannels() > 1:
+        print('Warning: Resampling to get first channel only.', file=sys.stderr)
+        fs, audio = convert_samplerate(args.audio, desired_sample_rate, get_first_channel=True)
+    elif fs != desired_sample_rate:
         print('Warning: original sample rate ({}) is different than {}hz. Resampling might produce erratic speech recognition.'.format(fs, desired_sample_rate), file=sys.stderr)
         fs, audio = convert_samplerate(args.audio, desired_sample_rate)
     else:
@@ -137,11 +151,12 @@ def main():
     print('Running inference.', file=sys.stderr)
     inference_start = timer()
     if args.extended:
-        print(metadata_to_string(ds.sttWithMetadata(audio)))
+        string_to_output = metadata_to_string(ds.sttWithMetadata(audio))
     elif args.json:
-        print(metadata_json_output(ds.sttWithMetadata(audio)))
+        string_to_output = metadata_json_output(ds.sttWithMetadata(audio))
     else:
-        print(ds.stt(audio))
+        string_to_output = ds.stt(audio)
+    output(string_to_output, args.output_file, args.audio)
     inference_end = timer() - inference_start
     print('Inference took %0.3fs for %0.3fs audio file.' % (inference_end, audio_length), file=sys.stderr)
 
