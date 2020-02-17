@@ -12,6 +12,7 @@ import json
 
 from deepspeech import Model, printVersions
 from timeit import default_timer as timer
+from pydub import AudioSegment
 
 try:
     from shhlex import quote
@@ -117,6 +118,9 @@ def main():
                         help='Output json from metadata with timestamp of each word')
     parser.add_argument('--output_file', required=False, action='store_true',
                         help='Will output to .txt file in the same place as the audio file.')
+    parser.add_argument('--normalize', dest='normalize', action='store_true')
+    parser.add_argument('--no_normalize', dest='normalize', action='store_false')
+    parser.set_defaults(normalize=True)
     args = parser.parse_args()
 
     print('Loading model from file {}'.format(args.model), file=sys.stderr)
@@ -144,6 +148,16 @@ def main():
         fs, audio = convert_samplerate(args.audio, desired_sample_rate)
     else:
         audio = np.frombuffer(fin.readframes(fin.getnframes()), np.int16)
+
+    if args.normalize:
+        def match_target_amplitude(sound, target_dBFS):
+            change_in_dBFS = target_dBFS - sound.dBFS
+            return sound.apply_gain(change_in_dBFS)
+
+        print("Normalizing audio file.")
+        sound = AudioSegment(audio.tobytes(), frame_rate=desired_sample_rate, channels=1, sample_width=2)
+        normalized_sound = match_target_amplitude(sound, -18.0)
+        audio = np.frombuffer(normalized_sound.raw_data, dtype=np.int16)
 
     audio_length = fin.getnframes() * (1/fs)
     fin.close()
