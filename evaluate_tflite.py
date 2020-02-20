@@ -3,6 +3,7 @@
 from __future__ import absolute_import, division, print_function
 
 import argparse
+import time
 import numpy as np
 import wave
 import csv
@@ -47,7 +48,7 @@ def tflite_worker(model, lm, trie, queue_in, queue_out, gpu_mask):
 
             decoded = ds.stt(audio)
 
-            queue_out.put({'wav': wavname, 'prediction': decoded, 'ground_truth': msg['transcript']})
+            queue_out.put({'wav': wavname, 'prediction': decoded})
         except FileNotFoundError as ex:
             print('FileNotFoundError: ', ex)
 
@@ -69,6 +70,8 @@ def main():
     parser.add_argument('--dump', required=False, action='store_true', default=False,
                         help='Dump the results as text file, with one line for each wav: "wav transcription"')
     args = parser.parse_args()
+
+    start_time = time.time()
 
     manager = Manager()
     work_todo = JoinableQueue()   # this is where we are going to store input data
@@ -93,8 +96,8 @@ def main():
         count = 0
         for row in csvreader:
             count += 1
-            work_todo.put({'filename': row['wav_filename'], 'transcript': row['transcript']})
-            wav_filenames.extend(row['wav_filename'])
+            work_todo.put({'filename': row['filename']})
+            wav_filenames.extend(row['filename'])
 
     print('Totally %d wav entries found in csv\n' % count)
     work_todo.join()
@@ -103,19 +106,21 @@ def main():
     while not work_done.empty():
         msg = work_done.get()
         losses.append(0.0)
-        ground_truths.append(msg['ground_truth'])
+        # ground_truths.append(msg['ground_truth'])
         predictions.append(msg['prediction'])
         wavlist.append(msg['wav'])
 
-    wer, cer, samples = calculate_report(wav_filenames, ground_truths, predictions, losses)
-    mean_loss = np.mean(losses)
+    # wer, cer, samples = calculate_report(wav_filenames, ground_truths, predictions, losses)
+    # mean_loss = np.mean(losses)
 
-    print('Test - WER: %f, CER: %f, loss: %f' %
-          (wer, cer, mean_loss))
+    # print('Test - WER: %f, CER: %f, loss: %f' %
+    #       (wer, cer, mean_loss))
+
+    print("Run time:", time.time() - start_time)
 
     if args.dump:
         with open(args.csv + '.txt', 'w') as ftxt, open(args.csv + '.out', 'w') as fout:
-            for wav, txt, out in zip(wavlist, ground_truths, predictions):
+            for wav, txt, out in zip(wavlist, predictions):
                 ftxt.write('%s %s\n' % (wav, txt))
                 fout.write('%s %s\n' % (wav, out))
             print('Reference texts dumped to %s.txt' % args.csv)
