@@ -110,8 +110,6 @@ def main(_):
     if not FLAGS.src:
         fail('You have to specify which file or catalog to transcribe via the --src flag.')
     src_path = os.path.abspath(FLAGS.src)
-    if not os.path.isfile(src_path):
-        fail('Path in --src not existing')
     if src_path.endswith('.catalog'):
         if FLAGS.dst:
             fail('Parameter --dst not supported if --src points to a catalog')
