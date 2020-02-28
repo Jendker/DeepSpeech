@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, division, print_function
 
+import glob
 import os
 import sys
 import json
@@ -76,8 +77,13 @@ def transcribe_file(audio_path, tlog_path):
                 json.dump(transcripts, tlog_file, default=float)
 
 
-def transcribe_many(path_pairs):
+def transcribe_many(path_pairs, type=None):
     pbar = create_progressbar(prefix='Transcribing files | ', max_value=len(path_pairs)).start()
+    if type is not None:
+        if type == 'dir':
+            src_paths = path_pairs
+            dst_paths = [path.replace('.wav', '.tlog') for path in src_paths]
+            path_pairs = zip(src_paths, dst_paths)
     for i, (src_path, dst_path) in enumerate(path_pairs):
         p = Process(target=transcribe_file, args=(src_path, dst_path))
         p.start()
@@ -120,6 +126,13 @@ def main(_):
         if any(map(lambda e: not os.path.isdir(os.path.dirname(e[1])), catalog_entries)):
             fail('Missing destination directory for at least one catalog entry')
         transcribe_many(catalog_entries)
+    elif os.path.isdir(src_path):
+        # Transcribe all files in dir
+        if FLAGS.dst:
+            fail('Destination file not supported for batch decoding jobs.')
+        else:
+            wav_paths = glob.glob(src_path + "/*.wav")
+            transcribe_many(wav_paths, 'dir')
     else:
         dst_path = os.path.abspath(FLAGS.dst) if FLAGS.dst else os.path.splitext(src_path)[0] + '.tlog'
         if os.path.isfile(dst_path):
