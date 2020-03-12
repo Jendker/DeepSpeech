@@ -173,4 +173,8 @@ def create_flags():
     f.DEFINE_string('source_model_checkpoint_dir', '', 'directory in which checkpoints have been stored, which will now be used for transfer learning' )
     f.DEFINE_boolean('fine_tune',      False,          'fine-tune the transfered layers from source model or not')
     f.DEFINE_integer('drop_source_layers',      1,          'single integer for how many layers to drop from source model (to drop just output == 1, drop penultimate and output ==2, etc)')
+
+    # Worker
+    f.DEFINE_integer('worker_batch_size', 32, 'number of elements in a worker batch')
     f.DEFINE_integer('gpu_no', None, 'GPU number for worker')
+    f.DEFINE_string('worker_path', '', 'root path for the worker to read and save results')
