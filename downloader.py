@@ -66,83 +66,59 @@ def frame_generator(frame_duration_ms, audio, sample_rate):
         timestamp += duration
         offset += n
 
-def vad_collector(sample_rate, frame_duration_ms,
-                  padding_duration_ms, vad, frames):
-    """Filters out non-voiced audio frames.
-
-    Given a webrtcvad.Vad and a source of audio frames, yields only
-    the voiced audio.
-
-    Uses a padded, sliding window algorithm over the audio frames.
-    When more than 90% of the frames in the window are voiced (as
-    reported by the VAD), the collector triggers and begins yielding
-    audio frames. Then the collector waits until 90% of the frames in
-    the window are unvoiced to detrigger.
-
-    The window is padded at the front and back to provide a small
-    amount of silence or the beginnings/endings of speech around the
-    voiced frames.
-
-    Arguments:
-
-    sample_rate - The audio sample rate, in Hz.
-    frame_duration_ms - The frame duration in milliseconds.
-    padding_duration_ms - The amount to pad the window, in milliseconds.
-    vad - An instance of webrtcvad.Vad.
-    frames - a source of audio frames (sequence or generator).
-
-    Returns: A generator that yields PCM audio data.
-    """
-    num_padding_frames = int(padding_duration_ms / frame_duration_ms)
-    # We use a deque for our sliding window/ring buffer.
+# taken from DSAlign
+def vad_split(audio_frames,
+              num_padding_frames=10,
+              threshold=0.5,
+              aggressiveness=3):
+    if aggressiveness not in [0, 1, 2, 3]:
+        raise ValueError('VAD-splitting aggressiveness mode has to be one of 0, 1, 2, or 3')
     ring_buffer = collections.deque(maxlen=num_padding_frames)
-    # We have two states: TRIGGERED and NOTTRIGGERED. We start in the
-    # NOTTRIGGERED state.
     triggered = False
-
+    vad = webrtcvad.Vad(int(aggressiveness))
     voiced_frames = []
-    for frame in frames:
-        is_speech = vad.is_speech(frame.bytes, sample_rate)
-
+    frame_duration_ms = 0
+    frame_index = 0
+    def get_num_samples(pcm_buffer_size):
+        channels = 1
+        width = 2
+        return pcm_buffer_size // (channels * width)
+    def get_pcm_duration(pcm_buffer_size):
+        return get_num_samples(pcm_buffer_size) / SAMPLE_RATE
+    for frame_index, frame in enumerate(audio_frames):
+        frame_duration_ms = frame.duration * 1000
+        frame = frame.bytes
+        if int(frame_duration_ms) not in [10, 20, 30]:
+            raise ValueError('VAD-splitting only supported for frame durations 10, 20, or 30 ms')
+        is_speech = vad.is_speech(frame, SAMPLE_RATE)
         if not triggered:
             ring_buffer.append((frame, is_speech))
             num_voiced = len([f for f, speech in ring_buffer if speech])
-            # If we're NOTTRIGGERED and more than 90% of the frames in
-            # the ring buffer are voiced frames, then enter the
-            # TRIGGERED state.
-            if num_voiced > 0.9 * ring_buffer.maxlen:
+            if num_voiced > threshold * ring_buffer.maxlen:
                 triggered = True
-                # We want to yield all the audio we see from now until
-                # we are NOTTRIGGERED, but we have to start with the
-                # audio that's already in the ring buffer.
                 for f, s in ring_buffer:
                     voiced_frames.append(f)
                 ring_buffer.clear()
         else:
-            # We're in the TRIGGERED state, so collect the audio data
-            # and add it to the ring buffer.
             voiced_frames.append(frame)
             ring_buffer.append((frame, is_speech))
             num_unvoiced = len([f for f, speech in ring_buffer if not speech])
-            # If more than 90% of the frames in the ring buffer are
-            # unvoiced, then enter NOTTRIGGERED and yield whatever
-            # audio we've collected.
-            if num_unvoiced > 0.9 * ring_buffer.maxlen:
+            if num_unvoiced > threshold * ring_buffer.maxlen:
                 triggered = False
-                yield b''.join([f.bytes for f in voiced_frames])
+                yield b''.join(voiced_frames), \
+                      frame_duration_ms * max(0, frame_index - len(voiced_frames)) / 1000, \
+                      frame_duration_ms * frame_index / 1000
                 ring_buffer.clear()
                 voiced_frames = []
-    if triggered:
-        pass
-    # If we have any leftover voiced audio when we run out of input,
-    # yield it.
-    if voiced_frames:
-        yield b''.join([f.bytes for f in voiced_frames])
+    if len(voiced_frames) > 0:
+        yield b''.join(voiced_frames), \
+              frame_duration_ms * (frame_index - len(voiced_frames)) / 1000, \
+              frame_duration_ms * (frame_index + 1) / 1000
 
 # -------------- End of files taken from DeepSpeech-examples repo --------------
 
 
-def segment_file(path, output_dir, vad):
+def segment_file(path, output_dir, aggressiveness, channel, file_dict):
     fin = wave.open(path, 'rb')
     fs = fin.getframerate()
     if fs != SAMPLE_RATE:
@@ -159,14 +135,24 @@ def segment_file(path, output_dir, vad):
     audio = np.frombuffer(normalized_sound.raw_data, dtype=np.int16)
 
     frames = frame_generator(30, audio.tobytes(), SAMPLE_RATE)
-    segments = vad_collector(SAMPLE_RATE, 30, 300, vad, frames)
+    segments = vad_split(frames, aggressiveness=aggressiveness)
 
-    for i, segment in enumerate(segments):
-        with wave.open(os.path.join(output_dir, "segment{}.wav".format(i)), 'wb') as wf:
+    filtered_segments = []
+    filter_shorter_than = 0.5  # seconds
+    for segment in segments:
+        _, time_start, time_end = segment
+        duration = time_end - time_start  # in secs
+        if duration > filter_shorter_than:
+            filtered_segments.append(segment)
+    for i, segment in enumerate(filtered_segments):
+        filename = "segment{}_{}.wav".format(i, channel)
+        with wave.open(os.path.join(output_dir, filename), 'wb') as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(SAMPLE_RATE)
-            wf.writeframes(segment)
+            segment_buffer, time_start, time_end = segment
+            wf.writeframes(segment_buffer)
+            file_dict[filename] = {"duration": time_end - time_start, "start_time": time_start, "channel": channel}
 
 
 def main(_):
@@ -186,22 +172,21 @@ def main(_):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu_no)
 
     aggressiveness = 1
-    vad = webrtcvad.Vad(aggressiveness)
 
-    output_dir = os.path.join(FLAGS.worker_path, str(FLAGS.gpu_no))
+    output_dir = os.path.join(FLAGS.worker_path, str(FLAGS.gpu_no), 'voicefile')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     for link, channels in test_links_to_download:
-        with tempfile.TemporaryDirectory(dir='/dev/shm/') as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
             file_path = wget.download(link, tmp)
             file_id = os.path.split(file_path)[1].rstrip(".mp3")
             file_id_output_path = os.path.join(output_dir, file_id)
-            if not os.path.isdir(file_id_output_path):
-                os.mkdir(file_id_output_path)
+            if os.path.isdir(file_id_output_path):
+                shutil.rmtree(file_id_output_path)
+            os.mkdir(file_id_output_path)
+            file_dict = {}
             for channel in range(channels):
                 channel_output_path = os.path.join(file_id_output_path, str(channel))
-                if os.path.exists(channel_output_path):
-                    shutil.rmtree(channel_output_path)
                 os.mkdir(channel_output_path)
                 channel_string = ''
                 if channels > 1:
@@ -210,8 +195,10 @@ def main(_):
                 os.system(
                     "sox " + file_path + ' --bits 16 -V1 -c 1 --no-dither --encoding signed-integer --endian little ' +
                     '--compression 0.0 ' + new_filename + channel_string)
-                segment_file(new_filename, channel_output_path, vad)
+                segment_file(new_filename, channel_output_path, aggressiveness, channel, file_dict)
                 os.remove(new_filename)
+            with open(os.path.join(file_id_output_path, "files.json"), 'w') as f:
+                json.dump(file_dict, f)
             os.remove(file_path)
 
 
