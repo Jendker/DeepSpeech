@@ -142,6 +142,15 @@ def main():
     else:
         audio = np.frombuffer(fin.readframes(fin.getnframes()), np.int16)
 
+    def match_target_amplitude(sound, target_dBFS):
+        change_in_dBFS = target_dBFS - sound.dBFS
+        return sound.apply_gain(change_in_dBFS)
+
+    print("Normalizing audio file.")
+    sound = AudioSegment(audio.tobytes(), frame_rate=desired_sample_rate, channels=1, sample_width=2)
+    normalized_sound = match_target_amplitude(sound, -18.0)
+    audio = np.frombuffer(normalized_sound.raw_data, dtype=np.int16)
+
     audio_length = fin.getnframes() * (1/fs_orig)
     fin.close()
 
