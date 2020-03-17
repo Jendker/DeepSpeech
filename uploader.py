@@ -58,8 +58,8 @@ def upload_results(auth, worker_path):
             with open(result_json_path) as f:
                 result_dict = json.load(f)
                 upload_success = upload_single_result(auth, result_dict)
-            # if upload_success:
-            os.rename(result_json_path, os.path.join(archive_folder, result_json_file_name))
+            if upload_success:
+                os.rename(result_json_path, os.path.join(archive_folder, result_json_file_name))
 
 
 def main():
