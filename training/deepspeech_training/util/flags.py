@@ -201,3 +201,8 @@ def create_flags():
                          message='The file pointed to by --one_shot_infer must exist and be readable.')
 
 # sphinx-doc: training_ref_flags_end
+
+    # Worker
+    f.DEFINE_integer('worker_batch_size', 32, 'number of elements in a worker batch')
+    f.DEFINE_integer('gpu_no', None, 'GPU number for worker')
+    f.DEFINE_string('worker_path', '', 'root path for the worker to read and save results')

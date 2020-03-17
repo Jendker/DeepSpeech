@@ -314,11 +314,48 @@ class CSV:
         return len(self.rows)
 
 
+class FileDict:
+    """Sample collection reader for reading a DeepSpeech CSV file
+    Automatically orders samples by CSV column wav_filesize (if available)."""
+    def __init__(self, file_dict, labeled=None):
+        """
+        Parameters
+        ----------
+        csv_filename : str
+            Path to the CSV file containing sample audio paths and transcripts
+        labeled : bool or None
+            If True: Reads LabeledSample instances. Fails, if CSV file has no transcript column.
+            If False: Ignores transcripts (if available) and reads (unlabeled) util.audio.Sample instances.
+            If None: Automatically determines if CSV file has a transcript column
+            (reading util.sample_collections.LabeledSample instances) or not (reading util.audio.Sample instances).
+        """
+        self.labeled = labeled
+        self.rows = []
+        self.labeled = True
+        for row in file_dict:
+            self.rows.append((str(row['wav_filename']), int(row['wav_filesize']), row['transcript']))
+        self.rows.sort(key=lambda r: r[1])
+
+    def __getitem__(self, i):
+        row = self.rows[i]
+        wav_filename = row[0]
+        with open(wav_filename, 'rb') as wav_file:
+            if self.labeled:
+                return LabeledSample(AUDIO_TYPE_WAV, wav_file.read(), row[2], sample_id=wav_filename)
+            return Sample(AUDIO_TYPE_WAV, wav_file.read(), sample_id=wav_filename)
+
+    def __iter__(self):
+        for i in range(len(self.rows)):
+            yield self[i]
+
+    def __len__(self):
+        return len(self.rows)
+
+
 def samples_from_file(filename, buffering=BUFFER_SIZE, labeled=None):
     """
     Returns an iterable of util.sample_collections.LabeledSample or util.audio.Sample instances
     loaded from a sample source file.
-
     Parameters
     ----------
     filename : str
@@ -331,6 +368,8 @@ def samples_from_file(filename, buffering=BUFFER_SIZE, labeled=None):
         If None: Automatically determines if source provides transcripts
         (reading util.sample_collections.LabeledSample instances) or not (reading util.audio.Sample instances).
     """
+    if isinstance(filename, list):
+        return FileDict(filename, labeled=labeled)
     ext = os.path.splitext(filename)[1].lower()
     if ext == '.sdb':
         return SDB(filename, buffering=buffering, labeled=labeled)
@@ -343,7 +382,6 @@ def samples_from_files(filenames, buffering=BUFFER_SIZE, labeled=None):
     """
     Returns an iterable of util.sample_collections.LabeledSample or util.audio.Sample instances
     loaded from a collection of sample source files.
-
     Parameters
     ----------
     filenames : list of str
