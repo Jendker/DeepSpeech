@@ -315,14 +315,14 @@ class CSV:
 
 
 class FileDict:
-    """Sample collection reader for reading a DeepSpeech CSV file
+    """Sample collection reader for reading a list of files
     Automatically orders samples by CSV column wav_filesize (if available)."""
     def __init__(self, file_dict, labeled=None):
         """
         Parameters
         ----------
-        csv_filename : str
-            Path to the CSV file containing sample audio paths and transcripts
+        source : list
+            List of files
         labeled : bool or None
             If True: Reads LabeledSample instances. Fails, if CSV file has no transcript column.
             If False: Ignores transcripts (if available) and reads (unlabeled) util.audio.Sample instances.
@@ -334,7 +334,7 @@ class FileDict:
         self.labeled = True
         for row in file_dict:
             self.rows.append((str(row['wav_filename']), int(row['wav_filesize']), row['transcript']))
-        self.rows.sort(key=lambda r: r[1])
+        # self.rows.sort(key=lambda r: r[1])
 
     def __getitem__(self, i):
         row = self.rows[i]
@@ -356,6 +356,7 @@ def samples_from_file(filename, buffering=BUFFER_SIZE, labeled=None):
     """
     Returns an iterable of util.sample_collections.LabeledSample or util.audio.Sample instances
     loaded from a sample source file.
+
     Parameters
     ----------
     filename : str
@@ -382,6 +383,7 @@ def samples_from_files(filenames, buffering=BUFFER_SIZE, labeled=None):
     """
     Returns an iterable of util.sample_collections.LabeledSample or util.audio.Sample instances
     loaded from a collection of sample source files.
+
     Parameters
     ----------
     filenames : list of str
@@ -397,6 +399,8 @@ def samples_from_files(filenames, buffering=BUFFER_SIZE, labeled=None):
     filenames = list(filenames)
     if len(filenames) == 0:
         raise ValueError('No files')
+    if isinstance(filenames, list):
+        return samples_from_file(filenames, buffering=buffering, labeled=labeled)
     if len(filenames) == 1:
         return samples_from_file(filenames[0], buffering=buffering, labeled=labeled)
     cols = list(map(partial(samples_from_file, buffering=buffering, labeled=labeled), filenames))
