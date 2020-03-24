@@ -67,7 +67,7 @@ class Worker:
         load_or_init_graph(session, method_order=['best'])
         return session
 
-    def worker_loop(self, create_model):
+    def loop(self, create_model):
         ids = os.listdir(os.path.join(self.worker_path, "voicefile"))
         if not ids:
             return
@@ -174,7 +174,7 @@ def main(_):
         sys.exit(1)
 
     if FLAGS.gpu_no >= len(Config.available_devices):
-        log_error("gpu_no " + str(FLAGS.gpu_no) + " is to high. Available devices " + str(len(Config.available_devices)))
+        log_error("gpu_no " + str(FLAGS.gpu_no) + " is too high. Available devices " + str(len(Config.available_devices)))
     if FLAGS.gpu_no >= 0:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu_no)
 
@@ -184,7 +184,7 @@ def main(_):
 
     while True:
         print("Loop")
-        worker.worker_loop(create_model)
+        worker.loop(create_model)
         print("Loop finished")
         time.sleep(20)
 
