@@ -2,11 +2,12 @@ import ast
 import json
 import os
 import sys
+import time
 import requests
 import datetime
 import argparse
 
-base_address = 'https://apiqa.yoummday.com/files/'
+BASE_ADDRESS = 'https://apiqa.yoummday.com/files/'
 
 
 def results_to_tsv(result_dict):
@@ -26,7 +27,7 @@ def upload_single_result(auth, result_dict):
     data['audioLength'] = result_dict['audioLength']
     data['numChannels'] = result_dict['numChannels']
     data['data'] = results_to_tsv(result_dict)
-    response = requests.post(base_address + 'mozdeepspeechtext', data=data)
+    response = requests.post(BASE_ADDRESS + 'mozdeepspeechtext', data=data)
     response_content = ast.literal_eval(response.content.decode('utf-8'))
     success = bool(response_content)
     if not success:
@@ -63,7 +64,7 @@ def upload_results(auth, worker_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser = argparse.ArgumentParser(description='Uploads worker results.')
     parser.add_argument('--worker_path', type=str)
     args = parser.parse_args()
 
@@ -74,7 +75,9 @@ def main():
     with open('auth', 'r') as f:
         auth = f.read()
 
-    upload_results(auth, args.worker_path)
+    while True:
+        upload_results(auth, args.worker_path)
+        time.sleep(60)
 
 
 if __name__ == '__main__':
