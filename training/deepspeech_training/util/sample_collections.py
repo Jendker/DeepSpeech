@@ -316,7 +316,7 @@ class CSV:
 
 class FileDict:
     """Sample collection reader for reading a list of files
-    Automatically orders samples by CSV column wav_filesize (if available)."""
+    Ordered before, no sorting required."""
     def __init__(self, file_dict, labeled=None):
         """
         Parameters
@@ -334,7 +334,6 @@ class FileDict:
         self.labeled = True
         for row in file_dict:
             self.rows.append((str(row['wav_filename']), int(row['wav_filesize']), row['transcript']))
-        # self.rows.sort(key=lambda r: r[1])
 
     def __getitem__(self, i):
         row = self.rows[i]

@@ -43,6 +43,8 @@ def upload_results(auth, worker_path):
     now = datetime.datetime.now()
     YYYYMMDD = "{:04d}{:02d}{:02d}".format(now.year, now.month, now.day)
     archive_folder = os.path.join(worker_path, 'archive', YYYYMMDD)
+    if not os.path.exists(worker_path):
+        return
     if not os.path.isdir(archive_folder):
         os.makedirs(archive_folder)
 
