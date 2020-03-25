@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, division, print_function
 
-import csv
+import collections
 import json
 import os
 import shutil
@@ -36,9 +36,12 @@ class Worker:
         self.transposed = None
         self.iterator = None
         self.worker_path = os.path.join(FLAGS.worker_path, str(FLAGS.gpu_no))
+        self.files_from_last_run = []
+        self.results_to_save = {}
 
         # create output_dir if does not exist
         self.output_dir = os.path.join(self.worker_path, 'result')
+        self.input_dir = os.path.join(self.worker_path, 'voicefile')
         if not os.path.isdir(self.output_dir):
             os.mkdir(self.output_dir)
 
@@ -60,6 +63,35 @@ class Worker:
         self.num_processes = int(num_processes)
 
     @staticmethod
+    def wav_filename_to_id(wav_filename):
+        return wav_filename.split('/')[-2]
+
+    @staticmethod
+    def wav_filename_to_filename(wav_filename):
+        return wav_filename.split('/')[-1]
+
+    def get_prediction_and_save_json(self, predictions, wav_filenames):
+        for prediction, wav_filename in zip(predictions, wav_filenames):
+            id = self.wav_filename_to_id(wav_filename)
+            id_result = self.results_to_save[id]
+            filename = self.wav_filename_to_filename(wav_filename)
+            if prediction:
+                id_result['segments'][filename]['text'] = prediction
+            else:
+                del id_result['segments'][filename]
+        ids_saved = []
+        for id, id_result in self.results_to_save.items():
+            if all('text' in x for x in id_result['segments'].values()):
+                # sort by filename
+                id_result['segments'] = collections.OrderedDict(sorted(id_result['segments'].items()))
+                with open(os.path.join(self.output_dir, id + ".json"), 'w') as f:
+                    json.dump(id_result, f)
+                ids_saved.append(id)
+        for id in ids_saved:
+            del self.results_to_save[id]
+            shutil.rmtree(os.path.join(self.input_dir, id))
+
+    @staticmethod
     def initialise_session():
         tfv1.train.get_or_create_global_step()
         session = tfv1.Session(config=Config.session_config)
@@ -68,37 +100,38 @@ class Worker:
         return session
 
     def loop(self, create_model):
-        ids = os.listdir(os.path.join(self.worker_path, "voicefile"))
+        if not os.path.exists(self.input_dir):
+            return
+        ids = os.listdir(self.input_dir)
         if not ids:
             return
         for id in ids:
             if id == ".DS_Store":
                 continue
-            with open(os.path.join(self.worker_path, "voicefile", id, "files.json"), 'r') as f:
+            with open(os.path.join(self.input_dir, id, "files.json"), 'r') as f:
                 file_dict = json.load(f)
-            file_dict_segments = file_dict['segments']
-            dataset_list = []
-            for key, value in file_dict_segments.items():
-                value["wav_filename"] = os.path.join(self.worker_path, "voicefile", id, key)
-                value["transcript"] = "a"
-                dataset_list.append(value)
-            print("evaluating ID", id)
-            with open('../temp/' + id + '.csv', 'w', newline='') as csvfile:
-                fieldnames = ['wav_filename', 'wav_filesize', 'transcript']
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                writer.writeheader()
-                for key, value in file_dict_segments.items():
-                    writer.writerow({'wav_filename': value['wav_filename'], 'wav_filesize': value['wav_filesize'], 'transcript': value['transcript']})
-            predictions = self.evaluate(dataset_list, create_model, file_dict_segments)
+            self.results_to_save[file_dict['incidentId']] = file_dict
+            dataset_list_to_predict = []
+            for key, value in file_dict['segments'].items():
+                new_value = value.copy()
+                new_value["wav_filename"] = os.path.join(self.input_dir, id, key)
+                new_value["transcript"] = "a"
+                dataset_list_to_predict.append(new_value)
+            dataset_list_to_predict = sorted(dataset_list_to_predict, key=lambda x: x['wav_filesize'], reverse=False)
+            new_dataset_length = len(self.files_from_last_run) + len(dataset_list_to_predict)
+            too_much_for_batch = new_dataset_length % FLAGS.worker_batch_size
+            ready_dataset_list_to_predict = self.files_from_last_run + dataset_list_to_predict[too_much_for_batch:]
+            self.files_from_last_run = dataset_list_to_predict[:too_much_for_batch]
+            if not ready_dataset_list_to_predict:
+                continue
+            predictions, wav_filenames = self.predict(ready_dataset_list_to_predict, create_model)
             if not os.path.isdir(self.output_dir):
                 os.mkdir(self.output_dir)
+            self.get_prediction_and_save_json(predictions, wav_filenames)
             with open(os.path.join(self.output_dir, id + "_text.txt"), 'w') as f:
                 f.write("\n".join(predictions))
-            with open(os.path.join(self.output_dir, id + ".json"), 'w') as f:
-                json.dump(file_dict, f)
-            shutil.rmtree(os.path.join(self.worker_path, "voicefile", id))
 
-    def evaluate(self, voicefile_list, create_model, file_dict_segments):
+    def predict(self, voicefile_list, create_model):
         dataset = create_dataset(voicefile_list, batch_size=FLAGS.worker_batch_size, train_phase=False)
         if self.iterator is None:
             self.iterator = tfv1.data.Iterator.from_structure(tfv1.data.get_output_types(dataset),
@@ -123,6 +156,7 @@ class Worker:
             self.session = self.initialise_session()
 
         predictions = []
+        wav_filenames = []
 
         def run_transcribe(init_op):
             bar = create_progressbar(prefix='Inference epoch | ',
@@ -145,21 +179,17 @@ class Worker:
                                                         num_processes=self.num_processes, scorer=self.scorer,
                                                         cutoff_prob=FLAGS.cutoff_prob, cutoff_top_n=FLAGS.cutoff_top_n)
                 for wav_filename, d in zip(batch_wav_filenames, decoded):
-                    filename = wav_filename.decode('UTF-8').split("/")[-1]
+                    wav_filename = wav_filename.decode('UTF-8')
                     prediction = d[0][1]
-                    if not prediction:
-                        del file_dict_segments[filename]
-                        continue
                     predictions.append(prediction)
-                    file_dict_segments[filename]["text"] = prediction
-                    del file_dict_segments[filename]["transcript"]  # remove unneeded dummy key
+                    wav_filenames.append(wav_filename)
                 step_count += 1
                 bar.update(step_count)
             bar.finish()
 
         print('Running inference on files')
         run_transcribe(transcribe_init_op)
-        return predictions
+        return predictions, wav_filenames
 
 
 def main(_):
@@ -183,9 +213,7 @@ def main(_):
     worker = Worker()
 
     while True:
-        print("Loop")
         worker.loop(create_model)
-        print("Loop finished")
         time.sleep(20)
 
 
