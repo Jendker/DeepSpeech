@@ -34,8 +34,6 @@ def upload_single_result(auth, result_dict):
         print("Upload failed.")
         print("Upload data:", data)
         print("Response:", response_content)
-    else:
-        print("Upload success")
     return success
 
 

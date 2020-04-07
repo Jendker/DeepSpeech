@@ -13,9 +13,9 @@ import wget
 import numpy as np
 from pydub import AudioSegment
 
-from util.config import Config, initialize_globals
-from util.flags import create_flags, FLAGS
-from util.logging import log_error
+from deepspeech_training.util.config import Config, initialize_globals
+from deepspeech_training.util.flags import create_flags, FLAGS
+from deepspeech_training.util.logging import log_error
 
 SAMPLE_RATE = 8000
 AGGRESSIVENESS = 1  # for VAD
@@ -141,8 +141,8 @@ class Downloader:
                 file_dict['segments'][filename] = {"duration": duration, "start_time": time_start, "channel": channel,
                                                    "wav_filesize": len(segment_buffer)}
 
-    def download_single_file(self):
-        data = {'auth': self.auth, 'limit': 1}
+    def download_files(self, to_download):
+        data = {'auth': self.auth, 'limit': to_download}
         response = requests.post(self.base_address + 'mozdeepspeechvoice', data=data)
         response_content = ast.literal_eval(response.content.decode('utf-8'))
         success = bool(response_content)
@@ -156,45 +156,47 @@ class Downloader:
             return_list = response_content['list']
         return success, return_list
 
+    def download_and_process_link(self, incident_id, link, audio_length, channels):
+        link = link.replace('\\', '')
+        file_dict = {'segments': {}, 'incidentId': incident_id, 'numChannels': channels,
+                     'audioLength': audio_length}
+        with tempfile.TemporaryDirectory(dir='/dev/shm/') as tmp:
+            file_path = wget.download(link, tmp)
+            file_id_output_path = os.path.join(self.output_dir, incident_id)
+            if os.path.isdir(file_id_output_path):
+                # don't touch ids which already have been downloaded
+                return
+            os.makedirs(file_id_output_path)
+            for channel in range(channels):
+                channel_string = ''
+                if channels > 1:
+                    channel_string = ' remix ' + str(channel + 1)
+                new_filename = file_path.replace(".mp3", "_" + str(channel) + ".wav")
+                os.system(
+                    "sox " + file_path + ' --bits 16 -V1 -c 1 --no-dither --encoding signed-integer --endian little ' +
+                    '--compression 0.0 ' + new_filename + channel_string)
+                self.segment_file(new_filename, file_id_output_path, channel, file_dict)
+                os.remove(new_filename)
+            with open(os.path.join(file_id_output_path, "files.json"), 'w') as f:
+                json.dump(file_dict, f)
+
     def loop(self):
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
         incidents = [f for f in os.listdir(self.output_dir) if os.path.isdir(os.path.join(self.output_dir, f))]
-        while FILES_TO_FILL > len(incidents):
-            success, files_list = self.download_single_file()
-            if not success:
-                print("Download failed. Exiting.")
-                sys.exit(1)
-            if not files_list:
-                print("No new files to download. Continuing.")
+        to_download = FILES_TO_FILL - len(incidents)
+        success, files_list = self.download_files(to_download)
+        if not success:
+            print("Download failed. Exiting.")
+            sys.exit(1)
+        if not files_list:
+            print("No new files to download. Continuing.")
+            return
+        for incident_id, link, audio_length, channels in files_list:
+            if FILES_TO_FILL <= len(incidents):
                 return
-            for incident_id, link, audio_length, channels in files_list:
-                if FILES_TO_FILL <= len(incidents):
-                    return
-                incidents.append(incident_id)
-                link = link.replace('\\', '')
-                file_dict = {'segments': {}, 'incidentId': incident_id, 'numChannels': channels,
-                             'audioLength': audio_length}
-                with tempfile.TemporaryDirectory(dir='/dev/shm/') as tmp:
-                    file_path = wget.download(link, tmp)
-                    file_id_output_path = os.path.join(self.output_dir, incident_id)
-                    if os.path.isdir(file_id_output_path):
-                        # don't touch ids which already have been downloaded
-                        continue
-                    os.mkdir(file_id_output_path)
-                    for channel in range(channels):
-                        channel_string = ''
-                        if channels > 1:
-                            channel_string = ' remix ' + str(channel + 1)
-                        new_filename = file_path.replace(".mp3", "_" + str(channel) + ".wav")
-                        os.system(
-                            "sox " + file_path + ' --bits 16 -V1 -c 1 --no-dither --encoding signed-integer --endian little ' +
-                            '--compression 0.0 ' + new_filename + channel_string)
-                        self.segment_file(new_filename, file_id_output_path, channel, file_dict)
-                        os.remove(new_filename)
-                    with open(os.path.join(file_id_output_path, "files.json"), 'w') as f:
-                        json.dump(file_dict, f)
-                    os.remove(file_path)
+            incidents.append(incident_id)
+            self.download_and_process_link(incident_id, link, audio_length, channels)
 
 
 def main(_):
@@ -214,7 +216,9 @@ def main(_):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu_no)
 
     downloader = Downloader(AGGRESSIVENESS, BASE_ADDRESS)
-
+    # for debugging - use list of files from API and save it as files_list
+    # for line in files_list:
+    #     downloader.download_and_process_link(*line)
     while True:
         downloader.loop()
         time.sleep(20)
