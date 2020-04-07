@@ -7,25 +7,23 @@ import json
 import os
 import shutil
 import time
-from functools import partial
 
 from multiprocessing import cpu_count
 
 import sys
 import absl.app
-import pandas
 import progressbar
 import tensorflow as tf
 import tensorflow.compat.v1 as tfv1
 
 from ds_ctcdecoder import ctc_beam_search_decoder_batch, Scorer
-from util.helpers import check_ctcdecoder_version
+from deepspeech_training.util.helpers import check_ctcdecoder_version
 
-from util.checkpoints import load_or_init_graph
-from util.config import Config, initialize_globals
-from util.feeding import create_dataset
-from util.flags import create_flags, FLAGS
-from util.logging import log_error, log_progress, create_progressbar
+from deepspeech_training.util.checkpoints import load_or_init_graph
+from deepspeech_training.util.config import Config, initialize_globals
+from deepspeech_training.util.feeding import create_dataset
+from deepspeech_training.util.flags import create_flags, FLAGS
+from deepspeech_training.util.logging import log_error, log_progress, create_progressbar
 
 
 class Worker:
@@ -100,13 +98,18 @@ class Worker:
         return session
 
     def loop(self, create_model):
+        files_processed = False
         if not os.path.exists(self.input_dir):
-            return
+            return files_processed
         ids = os.listdir(self.input_dir)
         if not ids:
-            return
+            return files_processed
         for id in ids:
-            if id == ".DS_Store":
+            if not os.path.exists(os.path.join(self.input_dir, id)):
+                # file was processed in the last loop and already finished and removed
+                continue
+            if id in self.results_to_save.keys():
+                # file was processed in the last loop
                 continue
             with open(os.path.join(self.input_dir, id, "files.json"), 'r') as f:
                 file_dict = json.load(f)
@@ -128,8 +131,8 @@ class Worker:
             if not os.path.isdir(self.output_dir):
                 os.mkdir(self.output_dir)
             self.get_prediction_and_save_json(predictions, wav_filenames)
-            with open(os.path.join(self.output_dir, id + "_text.txt"), 'w') as f:
-                f.write("\n".join(predictions))
+            files_processed = True
+        return files_processed
 
     def predict(self, voicefile_list, create_model):
         dataset = create_dataset(voicefile_list, batch_size=FLAGS.worker_batch_size, train_phase=False)
@@ -208,13 +211,13 @@ def main(_):
     if FLAGS.gpu_no >= 0:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu_no)
 
-    from DeepSpeech import create_model  # pylint: disable=cyclic-import,import-outside-toplevel
-
+    from deepspeech_training.train import create_model  # pylint: disable=cyclic-import,import-outside-toplevel
     worker = Worker()
 
     while True:
-        worker.loop(create_model)
-        time.sleep(20)
+        files_were_processed = worker.loop(create_model)
+        if not files_were_processed:
+            time.sleep(20)
 
 
 if __name__ == '__main__':
