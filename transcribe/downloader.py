@@ -37,6 +37,9 @@ class Downloader:
         self.output_dir = os.path.join(FLAGS.worker_path, str(FLAGS.gpu_no), 'voicefile')
         self.aggressiveness = aggressiveness
         self.base_address = base_address
+        if not os.path.exists('auth'):
+            print('auth file missing. place it with auth key in the transcribe folder')
+            sys.exit(1)
         with open('auth', 'r') as f:
             self.auth = f.read()
 
