@@ -135,7 +135,7 @@ class Worker:
         return files_processed
 
     def predict(self, voicefile_list, create_model):
-        dataset = create_dataset(voicefile_list, batch_size=FLAGS.worker_batch_size, train_phase=False)
+        dataset = create_dataset(voicefile_list, batch_size=FLAGS.worker_batch_size, train_phase=False, file_dict=True)
         if self.iterator is None:
             self.iterator = tfv1.data.Iterator.from_structure(tfv1.data.get_output_types(dataset),
                                                               tfv1.data.get_output_shapes(dataset),
