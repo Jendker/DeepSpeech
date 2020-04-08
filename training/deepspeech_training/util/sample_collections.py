@@ -291,7 +291,7 @@ class CSV:
                 if not wav_filename.is_absolute():
                     wav_filename = csv_dir / wav_filename
                 wav_filename = str(wav_filename)
-                wav_filesize = int(row['wav_filesize']) if 'wav_filesize' in row else 0
+                wav_filesize = int(float(row['wav_filesize'])) if 'wav_filesize' in row else 0
                 if self.labeled:
                     self.rows.append((wav_filename, wav_filesize, row['transcript']))
                 else:
@@ -351,7 +351,7 @@ class FileDict:
         return len(self.rows)
 
 
-def samples_from_file(filename, buffering=BUFFER_SIZE, labeled=None):
+def samples_from_file(filename, buffering=BUFFER_SIZE, labeled=None, file_dict=False):
     """
     Returns an iterable of util.sample_collections.LabeledSample or util.audio.Sample instances
     loaded from a sample source file.
@@ -367,8 +367,10 @@ def samples_from_file(filename, buffering=BUFFER_SIZE, labeled=None):
         If False: Ignores transcripts (if available) and reads (unlabeled) util.audio.Sample instances.
         If None: Automatically determines if source provides transcripts
         (reading util.sample_collections.LabeledSample instances) or not (reading util.audio.Sample instances).
+    file_dict : bool
+        Defines whether the dict of files is passed - used by the gpu_worker script
     """
-    if isinstance(filename, list):
+    if file_dict:
         return FileDict(filename, labeled=labeled)
     ext = os.path.splitext(filename)[1].lower()
     if ext == '.sdb':
@@ -378,7 +380,7 @@ def samples_from_file(filename, buffering=BUFFER_SIZE, labeled=None):
     raise ValueError('Unknown file type: "{}"'.format(ext))
 
 
-def samples_from_files(filenames, buffering=BUFFER_SIZE, labeled=None):
+def samples_from_files(filenames, buffering=BUFFER_SIZE, labeled=None, file_dict=False):
     """
     Returns an iterable of util.sample_collections.LabeledSample or util.audio.Sample instances
     loaded from a collection of sample source files.
@@ -394,12 +396,14 @@ def samples_from_files(filenames, buffering=BUFFER_SIZE, labeled=None):
         If False: Ignores transcripts (if available) and always reads (unlabeled) util.audio.Sample instances.
         If None: Reads util.sample_collections.LabeledSample instances from sources with transcripts and
         util.audio.Sample instances from sources with no transcripts.
+    file_dict : bool
+        Defines whether the dict of files is passed - used by the gpu_worker script
     """
     filenames = list(filenames)
     if len(filenames) == 0:
         raise ValueError('No files')
-    if isinstance(filenames, list):
-        return samples_from_file(filenames, buffering=buffering, labeled=labeled)
+    if file_dict:
+        return samples_from_file(filenames, buffering=buffering, labeled=labeled, file_dict=file_dict)
     if len(filenames) == 1:
         return samples_from_file(filenames[0], buffering=buffering, labeled=labeled)
     cols = list(map(partial(samples_from_file, buffering=buffering, labeled=labeled), filenames))

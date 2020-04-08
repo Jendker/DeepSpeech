@@ -114,9 +114,10 @@ def create_dataset(sources,
                    train_phase=False,
                    exception_box=None,
                    process_ahead=None,
-                   buffering=1 * MEGABYTE):
+                   buffering=1 * MEGABYTE,
+                   file_dict=False):
     def generate_values():
-        samples = samples_from_files(sources, buffering=buffering, labeled=True)
+        samples = samples_from_files(sources, buffering=buffering, labeled=True, file_dict=file_dict)
         for sample in change_audio_types(samples,
                                          AUDIO_TYPE_NP,
                                          process_ahead=2 * batch_size if process_ahead is None else process_ahead):
