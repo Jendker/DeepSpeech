@@ -19,7 +19,7 @@ import tensorflow.compat.v1 as tfv1
 from ds_ctcdecoder import ctc_beam_search_decoder_batch, Scorer
 from deepspeech_training.util.helpers import check_ctcdecoder_version
 
-from deepspeech_training.util.checkpoints import load_or_init_graph
+from deepspeech_training.util.checkpoints import load_graph_for_evaluation
 from deepspeech_training.util.config import Config, initialize_globals
 from deepspeech_training.util.feeding import create_dataset
 from deepspeech_training.util.flags import create_flags, FLAGS
@@ -94,7 +94,7 @@ class Worker:
         tfv1.train.get_or_create_global_step()
         session = tfv1.Session(config=Config.session_config)
         # Restore variables from training checkpoint
-        load_or_init_graph(session, method_order=['best'])
+        load_graph_for_evaluation(session)
         return session
 
     def loop(self, create_model):
