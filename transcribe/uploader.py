@@ -72,10 +72,11 @@ def main():
         print('flag --worker_path has to be specified. Tell which root path should be used.')
         sys.exit(1)
 
-    if not os.path.exists('auth'):
+    auth_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'auth')
+    if not os.path.exists(auth_path):
         print('auth file missing. place it with auth key in the transcribe folder')
         sys.exit(1)
-    with open('auth', 'r') as f:
+    with open(auth_path, 'r') as f:
         auth = f.read()
 
     while True:

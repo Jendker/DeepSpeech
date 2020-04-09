@@ -37,10 +37,11 @@ class Downloader:
         self.output_dir = os.path.join(FLAGS.worker_path, str(FLAGS.gpu_no), 'voicefile')
         self.aggressiveness = aggressiveness
         self.base_address = base_address
-        if not os.path.exists('auth'):
+        auth_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'auth')
+        if not os.path.exists(auth_path):
             print('auth file missing. place it with auth key in the transcribe folder')
             sys.exit(1)
-        with open('auth', 'r') as f:
+        with open(auth_path, 'r') as f:
             self.auth = f.read()
 
     # -------------- Taken from DeepSpeech-examples repo --------------
