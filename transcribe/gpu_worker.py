@@ -50,14 +50,17 @@ class Worker:
             self.scorer = None
 
         # Get number of accessible CPU cores for this process
-        try:
-            available_devices = len(Config.available_devices)
-            if available_devices:
-                num_processes = cpu_count() / available_devices
-            else:
-                num_processes = cpu_count()
-        except NotImplementedError:
-            num_processes = 1
+        if FLAGS.cpus_no is not None:
+            num_processes = FLAGS.cpus_no
+        else:
+            try:
+                available_devices = len(Config.available_devices)
+                if available_devices:
+                    num_processes = cpu_count() / available_devices
+                else:
+                    num_processes = cpu_count()
+            except NotImplementedError:
+                num_processes = 1
         self.num_processes = int(num_processes)
 
     @staticmethod
@@ -118,7 +121,7 @@ class Worker:
             for key, value in file_dict['segments'].items():
                 new_value = value.copy()
                 new_value["wav_filename"] = os.path.join(self.input_dir, id, key)
-                new_value["transcript"] = "a"
+                new_value["transcript"] = "a"  # dummy value needed for evaluation
                 dataset_list_to_predict.append(new_value)
             dataset_list_to_predict = sorted(dataset_list_to_predict, key=lambda x: x['wav_filesize'], reverse=False)
             new_dataset_length = len(self.files_from_last_run) + len(dataset_list_to_predict)

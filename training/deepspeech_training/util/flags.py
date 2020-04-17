@@ -205,4 +205,5 @@ def create_flags():
     # Worker
     f.DEFINE_integer('worker_batch_size', 32, 'number of elements in a worker batch')
     f.DEFINE_integer('gpu_no', None, 'GPU number for worker')
+    f.DEFINE_integer('cpus_no', None, 'no. of CPU worker')
     f.DEFINE_string('worker_path', '', 'root path for the worker to read and save results')
