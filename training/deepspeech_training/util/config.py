@@ -55,6 +55,9 @@ def initialize_globals():
     if not FLAGS.summary_dir:
         FLAGS.summary_dir = xdg.save_data_path(os.path.join('deepspeech', 'summaries'))
 
+    if FLAGS.gpu_no >= 0:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu_no)
+
     # Standard session configuration that'll be used for all new sessions.
     c.session_config = tfv1.ConfigProto(allow_soft_placement=True, log_device_placement=FLAGS.log_placement,
                                         inter_op_parallelism_threads=FLAGS.inter_op_parallelism_threads,
@@ -70,6 +73,10 @@ def initialize_globals():
     # If there is no GPU available, we fall back to CPU based operation
     if not c.available_devices:
         c.available_devices = [c.cpu_device]
+
+    if FLAGS.gpu_no is not None:
+        if FLAGS.gpu_no >= len(c.available_devices):
+            log_error("gpu_no " + str(FLAGS.gpu_no) + " is too high. Available devices " + str(len(c.available_devices)))
 
     if FLAGS.utf8:
         c.alphabet = UTF8Alphabet()
