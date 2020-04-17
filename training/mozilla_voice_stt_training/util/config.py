@@ -67,8 +67,9 @@ def initialize_globals():
     if not FLAGS.summary_dir:
         FLAGS.summary_dir = xdg.save_data_path(os.path.join('deepspeech', 'summaries'))
 
-    if FLAGS.gpu_no >= 0:
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu_no)
+    if FLAGS.gpu_no is not None:
+        if FLAGS.gpu_no >= 0:
+            os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu_no)
 
     # Standard session configuration that'll be used for all new sessions.
     c.session_config = tfv1.ConfigProto(allow_soft_placement=True, log_device_placement=FLAGS.log_placement,
