@@ -12,6 +12,7 @@ import json
 
 from deepspeech import Model, version
 from timeit import default_timer as timer
+from pydub import AudioSegment
 
 try:
     from shhlex import quote
