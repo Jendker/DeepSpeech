@@ -63,7 +63,7 @@ def main():
     decoder_pkg_url = get_decoder_pkg_url(version)
 
     install_requires_base = [
-        'tensorflow == 1.15.2',
+        'tensorflow-gpu == 1.15.2',
         'numpy',
         'progressbar2',
         'six',

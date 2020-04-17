@@ -19,7 +19,7 @@ from deepspeech_training.util.logging import log_error
 
 SAMPLE_RATE = 8000
 AGGRESSIVENESS = 1  # for VAD
-FILES_TO_FILL = 5
+FILES_TO_FILL = 100
 BASE_ADDRESS = 'https://api.yoummday.com/files/'
 
 
