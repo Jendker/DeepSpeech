@@ -204,8 +204,6 @@ class Downloader:
 
 
 def main(_):
-    initialize_globals()
-
     if not FLAGS.worker_path:
         log_error('flag --worker_path has to be specified. Tell which root path should be used.')
         sys.exit(1)
@@ -213,11 +211,6 @@ def main(_):
     if FLAGS.gpu_no is None:
         log_error('flag --gpu_no has to be specified. Tell which GPU is going to process data.')
         sys.exit(1)
-
-    if FLAGS.gpu_no >= len(Config.available_devices):
-        log_error("gpu_no " + str(FLAGS.gpu_no) + " is too high. Available devices " + str(len(Config.available_devices)))
-    if FLAGS.gpu_no >= 0:
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu_no)
 
     downloader = Downloader(AGGRESSIVENESS, BASE_ADDRESS)
     # for debugging - use list of files from API and save it as files_list

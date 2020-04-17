@@ -211,11 +211,6 @@ def main(_):
         log_error('flag --worker_path has to be specified. Tell which root path should be used.')
         sys.exit(1)
 
-    if FLAGS.gpu_no >= len(Config.available_devices):
-        log_error("gpu_no " + str(FLAGS.gpu_no) + " is too high. Available devices " + str(len(Config.available_devices)))
-    if FLAGS.gpu_no >= 0:
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(FLAGS.gpu_no)
-
     from deepspeech_training.train import create_model  # pylint: disable=cyclic-import,import-outside-toplevel
     worker = Worker()
 
