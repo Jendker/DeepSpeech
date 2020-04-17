@@ -210,8 +210,8 @@ def main(_):
         log_error('flag --worker_path has to be specified. Tell which root path should be used.')
         sys.exit(1)
 
-    if not FLAGS.gpu_no:
-        log_error('flag --gpu_no has to be specified. Tell which gpu is going to process data')
+    if FLAGS.gpu_no is None:
+        log_error('flag --gpu_no has to be specified. Tell which GPU is going to process data.')
         sys.exit(1)
 
     if FLAGS.gpu_no >= len(Config.available_devices):

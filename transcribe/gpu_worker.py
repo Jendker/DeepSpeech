@@ -41,7 +41,7 @@ class Worker:
         self.output_dir = os.path.join(self.worker_path, 'result')
         self.input_dir = os.path.join(self.worker_path, 'voicefile')
         if not os.path.isdir(self.output_dir):
-            os.mkdir(self.output_dir)
+            os.makedirs(self.output_dir)
 
         if FLAGS.scorer_path:
             self.scorer = Scorer(FLAGS.lm_alpha, FLAGS.lm_beta,
@@ -204,7 +204,7 @@ def main(_):
     initialize_globals()
 
     if FLAGS.gpu_no is None:
-        log_error('flag --gpu_no has to be specified for worker.')
+        log_error('flag --gpu_no has to be specified for worker. Tell which GPU is going to process data')
         sys.exit(1)
 
     if not FLAGS.worker_path:
