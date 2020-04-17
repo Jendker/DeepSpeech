@@ -122,6 +122,9 @@ class Worker:
                 dataset_list_to_predict.append(new_value)
             dataset_list_to_predict = sorted(dataset_list_to_predict, key=lambda x: x['wav_filesize'], reverse=False)
             new_dataset_length = len(self.files_from_last_run) + len(dataset_list_to_predict)
+            if new_dataset_length < FLAGS.worker_batch_size:
+                self.files_from_last_run = self.files_from_last_run + dataset_list_to_predict
+                continue
             too_much_for_batch = new_dataset_length % FLAGS.worker_batch_size
             ready_dataset_list_to_predict = self.files_from_last_run + dataset_list_to_predict[too_much_for_batch:]
             self.files_from_last_run = dataset_list_to_predict[:too_much_for_batch]
@@ -190,7 +193,6 @@ class Worker:
                 bar.update(step_count)
             bar.finish()
 
-        print('Running inference on files')
         run_transcribe(transcribe_init_op)
         return predictions, wav_filenames
 

@@ -12,6 +12,7 @@ import json
 
 import mozilla_voice_stt as stt
 from timeit import default_timer as timer
+from pydub import AudioSegment
 
 try:
     from shhlex import quote
