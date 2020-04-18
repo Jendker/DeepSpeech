@@ -29,10 +29,6 @@ from deepspeech_training.util.logging import log_error, log_progress, create_pro
 class Worker:
     def __init__(self):
         check_ctcdecoder_version()
-        self.session = None
-        self.logits = None
-        self.transposed = None
-        self.iterator = None
         self.worker_path = os.path.join(FLAGS.worker_path, str(FLAGS.gpu_no))
         self.files_from_last_run = []
         self.results_to_save = {}
@@ -142,63 +138,60 @@ class Worker:
         return files_processed
 
     def predict(self, voicefile_list, create_model):
+        tfv1.reset_default_graph()
+
         dataset = create_dataset(voicefile_list, batch_size=FLAGS.worker_batch_size, train_phase=False, file_dict=True)
-        if self.iterator is None:
-            self.iterator = tfv1.data.Iterator.from_structure(tfv1.data.get_output_types(dataset),
-                                                              tfv1.data.get_output_shapes(dataset),
-                                                              output_classes=tfv1.data.get_output_classes(dataset))
-        transcribe_init_op = self.iterator.make_initializer(dataset)
+        iterator = tfv1.data.Iterator.from_structure(tfv1.data.get_output_types(dataset),
+                                                     tfv1.data.get_output_shapes(dataset),
+                                                     output_classes=tfv1.data.get_output_classes(dataset))
+        transcribe_init_op = iterator.make_initializer(dataset)
 
         # One rate per layer
-        if self.logits is None:
-            self.batch_wav_filename, (self.batch_x, self.batch_x_len), self.batch_y = self.iterator.get_next()
-            no_dropout = [None] * 6
-            self.logits, _ = create_model(batch_x=self.batch_x,
-                                          batch_size=FLAGS.worker_batch_size,
-                                          seq_length=self.batch_x_len,
-                                          dropout=no_dropout)
+        batch_wav_filename, (batch_x, batch_x_len), batch_y = iterator.get_next()
+        no_dropout = [None] * 6
+        logits, _ = create_model(batch_x=batch_x,
+                                 batch_size=FLAGS.worker_batch_size,
+                                 seq_length=batch_x_len,
+                                 dropout=no_dropout)
 
         # Transpose to batch major and apply softmax for decoder
-        if self.transposed is None:
-            self.transposed = tf.nn.softmax(tf.transpose(a=self.logits, perm=[1, 0, 2]))
+        transposed = tf.nn.softmax(tf.transpose(a=logits, perm=[1, 0, 2]))
 
-        if self.session is None:
-            self.session = self.initialise_session()
+        with self.initialise_session() as session:
+            predictions = []
+            wav_filenames = []
 
-        predictions = []
-        wav_filenames = []
+            def run_transcribe(init_op):
+                bar = create_progressbar(prefix='Inference epoch | ',
+                                         widgets=['Steps: ', progressbar.Counter(), ' | ', progressbar.Timer()]).start()
+                log_progress('Inference epoch...')
+                step_count = 0
 
-        def run_transcribe(init_op):
-            bar = create_progressbar(prefix='Inference epoch | ',
-                                     widgets=['Steps: ', progressbar.Counter(), ' | ', progressbar.Timer()]).start()
-            log_progress('Inference epoch...')
-            step_count = 0
+                # Initialize iterator to the appropriate dataset
+                session.run(init_op)
 
-            # Initialize iterator to the appropriate dataset
-            self.session.run(init_op)
+                # First pass transposed logits for decoding
+                while True:
+                    try:
+                        batch_wav_filenames, batch_logits, batch_lengths = \
+                            session.run([batch_wav_filename, transposed, batch_x_len])
+                    except tf.errors.OutOfRangeError:
+                        break
 
-            # First pass transposed logits for decoding
-            while True:
-                try:
-                    batch_wav_filenames, batch_logits, batch_lengths = \
-                        self.session.run([self.batch_wav_filename, self.transposed, self.batch_x_len])
-                except tf.errors.OutOfRangeError:
-                    break
+                    decoded = ctc_beam_search_decoder_batch(batch_logits, batch_lengths, Config.alphabet, FLAGS.beam_width,
+                                                            num_processes=self.num_processes, scorer=self.scorer,
+                                                            cutoff_prob=FLAGS.cutoff_prob, cutoff_top_n=FLAGS.cutoff_top_n)
+                    for wav_filename, d in zip(batch_wav_filenames, decoded):
+                        wav_filename = wav_filename.decode('UTF-8')
+                        prediction = d[0][1]
+                        predictions.append(prediction)
+                        wav_filenames.append(wav_filename)
+                    step_count += 1
+                    bar.update(step_count)
+                bar.finish()
 
-                decoded = ctc_beam_search_decoder_batch(batch_logits, batch_lengths, Config.alphabet, FLAGS.beam_width,
-                                                        num_processes=self.num_processes, scorer=self.scorer,
-                                                        cutoff_prob=FLAGS.cutoff_prob, cutoff_top_n=FLAGS.cutoff_top_n)
-                for wav_filename, d in zip(batch_wav_filenames, decoded):
-                    wav_filename = wav_filename.decode('UTF-8')
-                    prediction = d[0][1]
-                    predictions.append(prediction)
-                    wav_filenames.append(wav_filename)
-                step_count += 1
-                bar.update(step_count)
-            bar.finish()
-
-        run_transcribe(transcribe_init_op)
-        return predictions, wav_filenames
+            run_transcribe(transcribe_init_op)
+            return predictions, wav_filenames
 
 
 def main(_):
