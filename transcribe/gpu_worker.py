@@ -116,7 +116,8 @@ class Worker:
                 continue
             with open(os.path.join(self.input_dir, id, "files.json"), 'r') as f:
                 file_dict = json.load(f)
-            self.results_to_save[file_dict['incidentId']] = file_dict
+            if file_dict['incidentId'] not in self.results_to_save:
+                self.results_to_save[file_dict['incidentId']] = file_dict
             dataset_list_to_predict = []
             for key, value in file_dict['segments'].items():
                 new_value = value.copy()
