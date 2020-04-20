@@ -159,10 +159,11 @@ class Worker:
 
     def predict_with_package(self, dataset_list):
         tfv1.reset_default_graph()
-        def tflite_worker(model, scorer, queue_in, queue_out, gpu_mask):
+        def tflite_worker(model, scorer, beam_width, queue_in, queue_out, gpu_mask):
             os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_mask)
             ds = Model(model)
             ds.enableExternalScorer(scorer)
+            ds.setBeamWidth(beam_width)
 
             while True:
                 try:
@@ -188,7 +189,7 @@ class Worker:
 
         self.processes = []
         for i in range(self.num_processes):
-            worker_process = Process(target=tflite_worker, args=(FLAGS.export_dir, FLAGS.scorer_path,
+            worker_process = Process(target=tflite_worker, args=(FLAGS.export_dir, FLAGS.scorer_path, FLAGS.beam_width,
                                                                  self.work_todo, self.work_done, i),
                                      daemon=True, name='tflite_process_{}'.format(i))
             worker_process.start()  # Launch reader() as a separate python process
