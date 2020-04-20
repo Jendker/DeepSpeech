@@ -7,8 +7,11 @@ import json
 import os
 import shutil
 import time
+import wave
+import numpy as np
 
-from multiprocessing import cpu_count
+from multiprocessing import JoinableQueue, Process, cpu_count, Manager
+from deepspeech import Model
 
 import sys
 import absl.app
@@ -58,6 +61,8 @@ class Worker:
             except NotImplementedError:
                 num_processes = 1
         self.num_processes = int(num_processes)
+        if not os.path.isdir(self.output_dir):
+            os.mkdir(self.output_dir)
 
     @staticmethod
     def wav_filename_to_id(wav_filename):
@@ -121,23 +126,91 @@ class Worker:
                 new_value["transcript"] = "a"  # dummy value needed for evaluation
                 dataset_list_to_predict.append(new_value)
             dataset_list_to_predict = sorted(dataset_list_to_predict, key=lambda x: x['wav_filesize'], reverse=False)
-            new_dataset_length = len(self.files_from_last_run) + len(dataset_list_to_predict)
+            package_processing_dataset, fast_processing_dataset = self.split_processing_method(dataset_list_to_predict)
+            if package_processing_dataset:
+                print('processing with package len:', len(package_processing_dataset))
+                self.predict_with_package(package_processing_dataset)
+            new_dataset_length = len(self.files_from_last_run) + len(fast_processing_dataset)
             if new_dataset_length < FLAGS.worker_batch_size:
-                self.files_from_last_run = self.files_from_last_run + dataset_list_to_predict
-                continue
-            too_much_for_batch = new_dataset_length % FLAGS.worker_batch_size
-            ready_dataset_list_to_predict = self.files_from_last_run + dataset_list_to_predict[too_much_for_batch:]
-            self.files_from_last_run = dataset_list_to_predict[:too_much_for_batch]
-            if not ready_dataset_list_to_predict:
-                continue
-            predictions, wav_filenames = self.predict(ready_dataset_list_to_predict, create_model)
-            if not os.path.isdir(self.output_dir):
-                os.mkdir(self.output_dir)
-            self.get_prediction_and_save_json(predictions, wav_filenames)
-            files_processed = True
+                self.files_from_last_run = self.files_from_last_run + fast_processing_dataset
+            else:
+                too_much_for_batch = new_dataset_length % FLAGS.worker_batch_size
+                ready_dataset_list_to_predict = self.files_from_last_run + fast_processing_dataset[too_much_for_batch:]
+                self.files_from_last_run = fast_processing_dataset[:too_much_for_batch]
+                predictions, wav_filenames = self.predict_fast(ready_dataset_list_to_predict, create_model)
+                self.get_prediction_and_save_json(predictions, wav_filenames)
+                files_processed = True
+            if package_processing_dataset:
+                predictions, wav_filenames = self.get_package_processing_results()
+                self.get_prediction_and_save_json(predictions, wav_filenames)
+                files_processed = True
         return files_processed
 
-    def predict(self, voicefile_list, create_model):
+    @staticmethod
+    def split_processing_method(dataset_list):
+        to_process_with_package = []
+        fast_process = []
+        for x in dataset_list:
+            if x['wav_filesize'] > FLAGS.package_larger_than:
+                to_process_with_package.append(x)
+            else:
+                fast_process.append(x)
+        return to_process_with_package, fast_process
+
+    def predict_with_package(self, dataset_list):
+        tfv1.reset_default_graph()
+        def tflite_worker(model, scorer, queue_in, queue_out, gpu_mask):
+            os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_mask)
+            ds = Model(model)
+            ds.enableExternalScorer(scorer)
+
+            while True:
+                try:
+                    msg = queue_in.get()
+
+                    filename = msg['filename']
+                    fin = wave.open(filename, 'rb')
+                    audio = np.frombuffer(fin.readframes(fin.getnframes()), np.int16)
+                    fin.close()
+
+                    decoded = ds.stt(audio)
+
+                    queue_out.put({'wav': filename, 'prediction': decoded, 'ground_truth': msg['transcript']})
+                except FileNotFoundError as ex:
+                    print('FileNotFoundError: ', ex)
+
+                print(queue_out.qsize(), end='\r')  # Update the current progress
+                queue_in.task_done()
+
+        self.manager = Manager()
+        self.work_todo = JoinableQueue()  # this is where we are going to store input data
+        self.work_done = self.manager.Queue()  # this where we are gonna push them out
+
+        self.processes = []
+        for i in range(self.num_processes):
+            worker_process = Process(target=tflite_worker, args=(FLAGS.export_dir, FLAGS.scorer_path,
+                                                                 self.work_todo, self.work_done, i),
+                                     daemon=True, name='tflite_process_{}'.format(i))
+            worker_process.start()  # Launch reader() as a separate python process
+            self.processes.append(worker_process)
+
+        for row in dataset_list:
+            self.work_todo.put({'filename': row['wav_filename'], 'transcript': row['transcript']})
+
+    def get_package_processing_results(self):
+        wavlist = []
+        predictions = []
+        self.work_todo.join()
+        for process in self.processes:
+            process.terminate()
+
+        while not self.work_done.empty():
+            msg = self.work_done.get()
+            predictions.append(msg['prediction'])
+            wavlist.append(msg['wav'])
+        return predictions, wavlist
+
+    def predict_fast(self, voicefile_list, create_model):
         tfv1.reset_default_graph()
 
         dataset = create_dataset(voicefile_list, batch_size=FLAGS.worker_batch_size, train_phase=False, file_dict=True)
@@ -196,6 +269,10 @@ class Worker:
 
 def main(_):
     initialize_globals()
+
+    if not FLAGS.export_dir:
+        log_error('flag --export_dir has to be defined for processing with package')
+        sys.exit(1)
 
     if FLAGS.gpu_no is None:
         log_error('flag --gpu_no has to be specified for worker. Tell which GPU is going to process data')
