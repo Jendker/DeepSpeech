@@ -129,7 +129,9 @@ class Worker:
             package_processing_dataset, fast_processing_dataset = self.split_processing_method(dataset_list_to_predict)
             if package_processing_dataset:
                 print('processing with package len:', len(package_processing_dataset))
-                self.predict_with_package(package_processing_dataset)
+                predictions, wav_filenames = self.predict_with_package(package_processing_dataset)
+                self.get_prediction_and_save_json(predictions, wav_filenames)
+                files_processed = True
             new_dataset_length = len(self.files_from_last_run) + len(fast_processing_dataset)
             if new_dataset_length < FLAGS.worker_batch_size:
                 self.files_from_last_run = self.files_from_last_run + fast_processing_dataset
@@ -138,10 +140,6 @@ class Worker:
                 ready_dataset_list_to_predict = self.files_from_last_run + fast_processing_dataset[too_much_for_batch:]
                 self.files_from_last_run = fast_processing_dataset[:too_much_for_batch]
                 predictions, wav_filenames = self.predict_fast(ready_dataset_list_to_predict, create_model)
-                self.get_prediction_and_save_json(predictions, wav_filenames)
-                files_processed = True
-            if package_processing_dataset:
-                predictions, wav_filenames = self.get_package_processing_results()
                 self.get_prediction_and_save_json(predictions, wav_filenames)
                 files_processed = True
         return files_processed
@@ -188,15 +186,17 @@ class Worker:
         self.work_done = self.manager.Queue()  # this where we are gonna push them out
 
         self.processes = []
-        for i in range(self.num_processes):
+        for i in range(1):  # just use 1 - single GPU
             worker_process = Process(target=tflite_worker, args=(FLAGS.export_dir, FLAGS.scorer_path, FLAGS.beam_width,
-                                                                 self.work_todo, self.work_done, i),
+                                                                 self.work_todo, self.work_done, FLAGS.gpu_no),
                                      daemon=True, name='tflite_process_{}'.format(i))
             worker_process.start()  # Launch reader() as a separate python process
             self.processes.append(worker_process)
 
         for row in dataset_list:
             self.work_todo.put({'filename': row['wav_filename'], 'transcript': row['transcript']})
+
+        return self.get_package_processing_results()
 
     def get_package_processing_results(self):
         wavlist = []
