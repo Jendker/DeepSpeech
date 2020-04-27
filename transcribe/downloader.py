@@ -191,7 +191,6 @@ class Downloader:
             with open(os.path.join(temp_id_output_path, "files.json"), 'w') as f:
                 json.dump(file_dict, f)
             shutil.copytree(temp_id_output_path, file_id_final_output_path)
-            shutil.copy(file_path, os.path.join(file_id_final_output_path, os.path.basename(file_path)))
 
     def loop(self):
         if not os.path.exists(self.output_dir):
