@@ -189,13 +189,13 @@ class Downloader:
             os.makedirs(self.output_dir)
         incidents = [f for f in os.listdir(self.output_dir) if os.path.isdir(os.path.join(self.output_dir, f))]
         to_download = FILES_TO_FILL - len(incidents)
+        if not to_download:
+            print("No new files to download. Continuing.")
+            return
         success, files_list = self.download_files(to_download)
         if not success:
             print("Download failed. Exiting.")
             sys.exit(1)
-        if not files_list:
-            print("No new files to download. Continuing.")
-            return
         for incident_id, link, audio_length, channels in files_list:
             if FILES_TO_FILL <= len(incidents):
                 return
