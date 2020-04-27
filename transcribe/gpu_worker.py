@@ -129,8 +129,10 @@ class Worker:
             package_processing_dataset, fast_processing_dataset = self.split_processing_method(dataset_list_to_predict)
             if package_processing_dataset:
                 print('processing with package len:', len(package_processing_dataset))
-                predictions, wav_filenames = self.predict_with_package(package_processing_dataset)
-                self.get_prediction_and_save_json(predictions, wav_filenames)
+                self.predict_with_package(package_processing_dataset)
+                if FLAGS.process_in_sequence:
+                    predictions, wav_filenames = self.get_package_processing_results()
+                    self.get_prediction_and_save_json(predictions, wav_filenames)
                 files_processed = True
             new_dataset_length = len(self.files_from_last_run) + len(fast_processing_dataset)
             if new_dataset_length < FLAGS.worker_batch_size:
@@ -142,6 +144,9 @@ class Worker:
                 predictions, wav_filenames = self.predict_fast(ready_dataset_list_to_predict, create_model)
                 self.get_prediction_and_save_json(predictions, wav_filenames)
                 files_processed = True
+            if package_processing_dataset and not FLAGS.process_in_sequence:
+                predictions, wav_filenames = self.get_package_processing_results()
+                self.get_prediction_and_save_json(predictions, wav_filenames)
         return files_processed
 
     @staticmethod
@@ -195,8 +200,6 @@ class Worker:
 
         for row in dataset_list:
             self.work_todo.put({'filename': row['wav_filename'], 'transcript': row['transcript']})
-
-        return self.get_package_processing_results()
 
     def get_package_processing_results(self):
         wavlist = []
