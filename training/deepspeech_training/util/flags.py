@@ -207,5 +207,6 @@ def create_flags():
     f.DEFINE_integer('gpu_no', None, 'GPU number for worker')
     f.DEFINE_integer('cpus_no', None, 'no. of CPU worker')
     f.DEFINE_integer('package_larger_than', 3000000, 'if file size (in bytes) is larger than the value then inference is done with DS package')
+    f.DEFINE_integer('retry_split_duration', 15, 'for downloader - if segment is longer than the value given in secs then the split retry during processing will be made')
     f.DEFINE_string('worker_path', '', 'root path for the worker to read and save results')
     f.DEFINE_boolean('process_in_sequence', False, 'whether to process in sequence - to use if longer files should be also processed on GPU')
