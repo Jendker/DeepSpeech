@@ -7,7 +7,7 @@ import requests
 import datetime
 import argparse
 
-BASE_ADDRESS = 'https://apiqa.yoummday.com/files/'
+BASE_ADDRESS = 'https://api.yoummday.com/files/'
 
 
 def results_to_tsv(result_dict):
@@ -16,7 +16,7 @@ def results_to_tsv(result_dict):
         if 'text' not in value:
             print("continuing")
             continue
-        tsv_data += str(value["channel"]) + '\t' + str(int(value['start_time'] * 1000)) + '\t' + str(int(value['duration'] * 1000)) + \
+        tsv_data += str(value["channel"]) + '\t' + str(int(value['start_time'] * 1000)) + '\t' + str(int(value['duration'] * 1000)) + '\t' + \
                     value['text'] + '\n'
     return tsv_data
 
