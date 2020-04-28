@@ -22,12 +22,17 @@ def results_to_tsv(result_dict):
 
 
 def upload_single_result(auth, result_dict):
+    success = False
     data = {'auth': auth}
     data['incidentId'] = result_dict['incidentId']
     data['audioLength'] = result_dict['audioLength']
     data['numChannels'] = result_dict['numChannels']
     data['data'] = results_to_tsv(result_dict)
-    response = requests.post(BASE_ADDRESS + 'mozdeepspeechtext', data=data)
+    try:
+        response = requests.post(BASE_ADDRESS + 'mozdeepspeechtext', data=data)
+    except Exception as e:
+        print("Exception at upload_single_result", e)
+        return success
     response_content = ast.literal_eval(response.content.decode('utf-8'))
     success = bool(response_content)
     if not success:
@@ -53,8 +58,7 @@ def upload_results(auth, worker_path):
         gpu_results_path = os.path.join(worker_path, gpu_no, 'result')
         if not os.path.isdir(gpu_results_path):
             continue
-        for result_json_file_name in [o for o in os.listdir(gpu_results_path) if
-                       '.json' in o]:
+        for result_json_file_name in [o for o in os.listdir(gpu_results_path) if '.json' in o]:
             result_json_path = os.path.join(gpu_results_path, result_json_file_name)
             with open(result_json_path) as f:
                 result_dict = json.load(f)
