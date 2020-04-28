@@ -151,8 +151,14 @@ class Downloader:
                                                    "wav_filesize": len(segment_buffer)}
 
     def download_files(self, to_download):
+        success = False
+        return_list = None
         data = {'auth': self.auth, 'limit': to_download}
-        response = requests.post(self.base_address + 'mozdeepspeechvoice', data=data)
+        try:
+            response = requests.post(self.base_address + 'mozdeepspeechvoice', data=data)
+        except Exception as e:
+            print("Exception at download_files", e)
+            return success, return_list
         response_content = ast.literal_eval(response.content.decode('utf-8'))
         success = bool(response_content)
         return_list = []
@@ -170,7 +176,11 @@ class Downloader:
         file_dict = {'segments': {}, 'incidentId': incident_id, 'numChannels': channels,
                      'audioLength': audio_length}
         with tempfile.TemporaryDirectory(dir='/dev/shm/') as tmp:
-            file_path = wget.download(link, tmp)
+            try:
+                file_path = wget.download(link, tmp)
+            except Exception as e:
+                print("Exception in download_and_process_link", e)
+                return
             temp_id_output_path = os.path.join(tmp, incident_id)
             file_id_final_output_path = os.path.join(self.output_dir, incident_id)
             if os.path.isdir(file_id_final_output_path):
@@ -202,8 +212,8 @@ class Downloader:
             return
         success, files_list = self.download_files(to_download)
         if not success:
-            print("Download failed. Exiting.")
-            sys.exit(1)
+            print("Download failed.")
+            return
         for incident_id, link, audio_length, channels in files_list:
             if FILES_TO_FILL <= len(incidents):
                 return
