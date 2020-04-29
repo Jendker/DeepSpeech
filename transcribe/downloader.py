@@ -3,6 +3,7 @@ import collections
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import time
 import wave
@@ -10,7 +11,6 @@ import sys
 import absl.app
 import requests
 import webrtcvad
-import wget
 import numpy as np
 from pydub import AudioSegment
 
@@ -176,10 +176,11 @@ class Downloader:
         file_dict = {'segments': {}, 'incidentId': incident_id, 'numChannels': channels,
                      'audioLength': audio_length}
         with tempfile.TemporaryDirectory(dir='/dev/shm/') as tmp:
+            file_path = os.path.join(tmp, "download_file.mp3")
             try:
-                file_path = wget.download(link, tmp)
+                subprocess.check_output(['wget', link, '-O', file_path, '-q'], stderr=subprocess.STDOUT)
             except Exception as e:
-                print("Exception in download_and_process_link", e)
+                print("file download failed with error", e)
                 return
             temp_id_output_path = os.path.join(tmp, incident_id)
             file_id_final_output_path = os.path.join(self.output_dir, incident_id)
@@ -212,7 +213,7 @@ class Downloader:
             return
         success, files_list = self.download_files(to_download)
         if not success:
-            print("Download failed.")
+            print("Download file list failed.")
             return
         for incident_id, link, audio_length, channels in files_list:
             if FILES_TO_FILL <= len(incidents):
