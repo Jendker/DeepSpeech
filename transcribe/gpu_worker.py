@@ -5,6 +5,9 @@ from __future__ import absolute_import, division, print_function
 import collections
 import json
 import os
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import shutil
 import time
 import wave
@@ -16,8 +19,12 @@ from deepspeech import Model
 import sys
 import absl.app
 import progressbar
+
 import tensorflow as tf
 import tensorflow.compat.v1 as tfv1
+
+import tensorflow.compat.v1.logging as tflogging
+tflogging.set_verbosity(tflogging.ERROR)
 
 from ds_ctcdecoder import ctc_beam_search_decoder_batch, Scorer
 from deepspeech_training.util.helpers import check_ctcdecoder_version
@@ -292,6 +299,7 @@ def main(_):
     while True:
         files_were_processed = worker.loop(create_model)
         if not files_were_processed:
+            print("No files processed, sleep")
             time.sleep(20)
 
 
