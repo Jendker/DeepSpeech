@@ -199,7 +199,7 @@ class Worker:
         self.work_done = self.manager.Queue()  # this where we are gonna push them out
 
         self.processes = []
-        for i in range(1):  # just use 1 - single GPU
+        for i in range(1 if FLAGS.process_in_sequence else min(len(dataset_list), self.num_processes)):  # just use 1 if in sequence - single GPU, otherwise cpus_no
             worker_process = Process(target=tflite_worker, args=(FLAGS.export_dir, FLAGS.scorer_path, FLAGS.beam_width,
                                                                  FLAGS.lm_alpha, FLAGS.lm_beta, self.work_todo,
                                                                  self.work_done, FLAGS.gpu_no),
