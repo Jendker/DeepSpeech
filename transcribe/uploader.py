@@ -66,6 +66,7 @@ def upload_results(auth, worker_path):
                     result_dict = json.load(f)
                     upload_success = upload_single_result(auth, result_dict)
                 except:
+                    print("File upload failed. Deleting. Path:", result_json_path)
                     upload_success = False
             if upload_success:
                 os.rename(result_json_path, os.path.join(archive_folder, result_json_file_name))

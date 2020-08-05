@@ -126,6 +126,7 @@ class Worker:
                 with open(os.path.join(self.input_dir, id, "files.json"), 'r') as f:
                     file_dict = json.load(f)
             except:
+                print("File processing failed. Deleting. Path:", os.path.join(self.input_dir, id))
                 shutil.rmtree(os.path.join(self.input_dir, id))
                 continue
             if file_dict['incidentId'] not in self.results_to_save:
