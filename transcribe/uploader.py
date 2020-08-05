@@ -1,6 +1,7 @@
 import ast
 import json
 import os
+import shutil
 import sys
 import time
 import requests
@@ -61,10 +62,15 @@ def upload_results(auth, worker_path):
         for result_json_file_name in [o for o in os.listdir(gpu_results_path) if '.json' in o]:
             result_json_path = os.path.join(gpu_results_path, result_json_file_name)
             with open(result_json_path) as f:
-                result_dict = json.load(f)
-                upload_success = upload_single_result(auth, result_dict)
+                try:
+                    result_dict = json.load(f)
+                    upload_success = upload_single_result(auth, result_dict)
+                except:
+                    upload_success = False
             if upload_success:
                 os.rename(result_json_path, os.path.join(archive_folder, result_json_file_name))
+            else:
+                os.remove(result_json_path)
 
 
 def main():
