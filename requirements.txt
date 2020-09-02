@@ -1,0 +1,3 @@
+pydub
+webrtcvad
+deepspeech==0.7.4
