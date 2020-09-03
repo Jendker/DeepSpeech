@@ -511,66 +511,15 @@ class CSV(SampleList):
                 if not wav_filename.is_absolute():
                     wav_filename = csv_dir / wav_filename
                 wav_filename = str(wav_filename)
-<<<<<<< HEAD:training/mozilla_voice_stt_training/util/sample_collections.py
                 wav_filesize = int(row['wav_filesize']) if 'wav_filesize' in row else 0
                 if labeled:
                     rows.append((wav_filename, wav_filesize, row['transcript']))
-=======
-                wav_filesize = int(float(row['wav_filesize'])) if 'wav_filesize' in row else 0
-                if self.labeled:
-                    self.rows.append((wav_filename, wav_filesize, row['transcript']))
->>>>>>> Fix to sample_collections:training/deepspeech_training/util/sample_collections.py
                 else:
                     rows.append((wav_filename, wav_filesize))
         super(CSV, self).__init__(rows, labeled=labeled, reverse=reverse)
 
 
-<<<<<<< HEAD:training/mozilla_voice_stt_training/util/sample_collections.py
 def samples_from_source(sample_source, buffering=BUFFER_SIZE, labeled=None, reverse=False):
-=======
-    def __len__(self):
-        return len(self.rows)
-
-
-class FileDict:
-    """Sample collection reader for reading a list of files
-    Ordered before, no sorting required."""
-    def __init__(self, file_dict, labeled=None):
-        """
-        Parameters
-        ----------
-        source : list
-            List of files
-        labeled : bool or None
-            If True: Reads LabeledSample instances. Fails, if CSV file has no transcript column.
-            If False: Ignores transcripts (if available) and reads (unlabeled) util.audio.Sample instances.
-            If None: Automatically determines if CSV file has a transcript column
-            (reading util.sample_collections.LabeledSample instances) or not (reading util.audio.Sample instances).
-        """
-        self.labeled = labeled
-        self.rows = []
-        self.labeled = True
-        for row in file_dict:
-            self.rows.append((str(row['wav_filename']), int(row['wav_filesize']), row['transcript']))
-
-    def __getitem__(self, i):
-        row = self.rows[i]
-        wav_filename = row[0]
-        with open(wav_filename, 'rb') as wav_file:
-            if self.labeled:
-                return LabeledSample(AUDIO_TYPE_WAV, wav_file.read(), row[2], sample_id=wav_filename)
-            return Sample(AUDIO_TYPE_WAV, wav_file.read(), sample_id=wav_filename)
-
-    def __iter__(self):
-        for i in range(len(self.rows)):
-            yield self[i]
-
-    def __len__(self):
-        return len(self.rows)
-
-
-def samples_from_file(filename, buffering=BUFFER_SIZE, labeled=None, file_dict=False):
->>>>>>> Fix to sample_collections:training/deepspeech_training/util/sample_collections.py
     """
     Loads samples from a sample source file.
 
@@ -585,7 +534,6 @@ def samples_from_file(filename, buffering=BUFFER_SIZE, labeled=None, file_dict=F
         If False: Ignores transcripts (if available) and reads (unlabeled) util.audio.Sample instances.
         If None: Automatically determines if source provides transcripts
         (reading util.sample_collections.LabeledSample instances) or not (reading util.audio.Sample instances).
-<<<<<<< HEAD:training/mozilla_voice_stt_training/util/sample_collections.py
     reverse : bool
         If the order of the samples should be reversed
 
@@ -594,14 +542,6 @@ def samples_from_file(filename, buffering=BUFFER_SIZE, labeled=None, file_dict=F
     iterable of util.sample_collections.LabeledSample or util.audio.Sample instances supporting len.
     """
     ext = os.path.splitext(sample_source)[1].lower()
-=======
-    file_dict : bool
-        Defines whether the dict of files is passed - used by the gpu_worker script
-    """
-    if file_dict:
-        return FileDict(filename, labeled=labeled)
-    ext = os.path.splitext(filename)[1].lower()
->>>>>>> Fix to sample_collections:training/deepspeech_training/util/sample_collections.py
     if ext == '.sdb':
         return SDB(sample_source, buffering=buffering, labeled=labeled, reverse=reverse)
     if ext == '.csv':
@@ -609,11 +549,7 @@ def samples_from_file(filename, buffering=BUFFER_SIZE, labeled=None, file_dict=F
     raise ValueError('Unknown file type: "{}"'.format(ext))
 
 
-<<<<<<< HEAD:training/mozilla_voice_stt_training/util/sample_collections.py
 def samples_from_sources(sample_sources, buffering=BUFFER_SIZE, labeled=None, reverse=False):
-=======
-def samples_from_files(filenames, buffering=BUFFER_SIZE, labeled=None, file_dict=False):
->>>>>>> Fix to sample_collections:training/deepspeech_training/util/sample_collections.py
     """
     Loads and combines samples from a list of source files. Sources are combined in an interleaving way to
     keep default sample order from shortest to longest.
@@ -629,32 +565,18 @@ def samples_from_files(filenames, buffering=BUFFER_SIZE, labeled=None, file_dict
         If False: Ignores transcripts (if available) and always reads (unlabeled) util.audio.Sample instances.
         If None: Reads util.sample_collections.LabeledSample instances from sources with transcripts and
         util.audio.Sample instances from sources with no transcripts.
-<<<<<<< HEAD:training/mozilla_voice_stt_training/util/sample_collections.py
     reverse : bool
         If the order of the samples should be reversed
 
     Returns
     -------
     iterable of util.sample_collections.LabeledSample (labeled=True) or util.audio.Sample (labeled=False) supporting len
-=======
-    file_dict : bool
-        Defines whether the dict of files is passed - used by the gpu_worker script
->>>>>>> Fix to sample_collections:training/deepspeech_training/util/sample_collections.py
     """
     sample_sources = list(sample_sources)
     if len(sample_sources) == 0:
         raise ValueError('No files')
-<<<<<<< HEAD:training/mozilla_voice_stt_training/util/sample_collections.py
     if len(sample_sources) == 1:
         return samples_from_source(sample_sources[0], buffering=buffering, labeled=labeled, reverse=reverse)
     cols = [samples_from_source(source, buffering=buffering, labeled=labeled, reverse=reverse)
             for source in sample_sources]
     return Interleaved(*cols, key=lambda s: s.duration, reverse=reverse)
-=======
-    if file_dict:
-        return samples_from_file(filenames, buffering=buffering, labeled=labeled, file_dict=file_dict)
-    if len(filenames) == 1:
-        return samples_from_file(filenames[0], buffering=buffering, labeled=labeled)
-    cols = list(map(partial(samples_from_file, buffering=buffering, labeled=labeled), filenames))
-    return Interleaved(*cols, key=lambda s: s.duration)
->>>>>>> Fix to sample_collections:training/deepspeech_training/util/sample_collections.py
