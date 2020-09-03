@@ -14,7 +14,7 @@ from .text import text_to_char_array
 from .flags import FLAGS
 from .augmentations import apply_sample_augmentations, apply_graph_augmentations
 from .audio import read_frames_from_file, vad_split, pcm_to_np, DEFAULT_FORMAT
-from .sample_collections import samples_from_sources
+from .sample_collections import samples_from_sources, SampleList
 from .helpers import remember_exception, MEGABYTE
 
 
@@ -94,14 +94,18 @@ def create_dataset(sources,
                    limit=0,
                    exception_box=None,
                    process_ahead=None,
-                   buffering=1 * MEGABYTE):
+                   buffering=1 * MEGABYTE,
+                   sample_list=False):
     epoch_counter = Counter()  # survives restarts of the dataset and its generator
 
     def generate_values():
         epoch = epoch_counter['epoch']
         if train_phase:
             epoch_counter['epoch'] += 1
-        samples = samples_from_sources(sources, buffering=buffering, labeled=True, reverse=reverse)
+        if sample_list:
+            samples = SampleList(sources, labeled=True)
+        else:
+            samples = samples_from_sources(sources, buffering=buffering, labeled=True, reverse=reverse)
         num_samples = len(samples)
         if limit > 0:
             num_samples = min(limit, num_samples)

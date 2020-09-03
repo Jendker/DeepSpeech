@@ -14,8 +14,8 @@ import webrtcvad
 import numpy as np
 from pydub import AudioSegment
 
-from deepspeech_training.util.flags import create_flags, FLAGS
-from deepspeech_training.util.logging import log_error
+from mozilla_voice_stt_training.util.flags import create_flags, FLAGS
+from mozilla_voice_stt_training.util.logging import log_error
 
 SAMPLE_RATE = 8000
 INITIAL_AGGRESSIVENESS = 1  # for VAD

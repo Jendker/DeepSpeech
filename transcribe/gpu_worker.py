@@ -14,7 +14,7 @@ import wave
 import numpy as np
 
 from multiprocessing import JoinableQueue, Process, cpu_count, Manager
-from deepspeech import Model
+from mozilla_voice_stt import Model
 
 import sys
 import absl.app
@@ -26,14 +26,14 @@ import tensorflow.compat.v1 as tfv1
 import tensorflow.compat.v1.logging as tflogging
 tflogging.set_verbosity(tflogging.ERROR)
 
-from ds_ctcdecoder import ctc_beam_search_decoder_batch, Scorer
-from deepspeech_training.util.helpers import check_ctcdecoder_version
+from mvs_ctcdecoder import ctc_beam_search_decoder_batch, Scorer
+from mozilla_voice_stt_training.util.helpers import check_ctcdecoder_version
 
-from deepspeech_training.util.checkpoints import load_graph_for_evaluation
-from deepspeech_training.util.config import Config, initialize_globals
-from deepspeech_training.util.feeding import create_dataset
-from deepspeech_training.util.flags import create_flags, FLAGS
-from deepspeech_training.util.logging import log_error, log_progress, create_progressbar
+from mozilla_voice_stt_training.util.checkpoints import load_graph_for_evaluation
+from mozilla_voice_stt_training.util.config import Config, initialize_globals
+from mozilla_voice_stt_training.util.feeding import create_dataset
+from mozilla_voice_stt_training.util.flags import create_flags, FLAGS
+from mozilla_voice_stt_training.util.logging import log_error, log_progress, create_progressbar
 
 
 class Worker:
@@ -132,12 +132,12 @@ class Worker:
             if file_dict['incidentId'] not in self.results_to_save:
                 self.results_to_save[file_dict['incidentId']] = file_dict
             dataset_list_to_predict = []
-            for key, value in file_dict['segments'].items():
-                new_value = value.copy()
-                new_value["wav_filename"] = os.path.join(self.input_dir, id, key)
-                new_value["transcript"] = "a"  # dummy value needed for evaluation
+            for key, segment in file_dict['segments'].items():
+                wav_filename = os.path.join(self.input_dir, id, key)
+                wav_filesize = segment['wav_filesize']
+                wav_transcript = 'dummy'
+                new_value = [wav_filename, wav_filesize, wav_transcript]
                 dataset_list_to_predict.append(new_value)
-            dataset_list_to_predict = sorted(dataset_list_to_predict, key=lambda x: x['wav_filesize'], reverse=False)
             package_processing_dataset, fast_processing_dataset = self.split_processing_method(dataset_list_to_predict)
             if package_processing_dataset:
                 print('processing with package len:', len(package_processing_dataset))
@@ -151,9 +151,9 @@ class Worker:
                 self.files_from_last_run = self.files_from_last_run + fast_processing_dataset
             else:
                 too_much_for_batch = new_dataset_length % FLAGS.worker_batch_size
-                ready_dataset_list_to_predict = self.files_from_last_run + fast_processing_dataset[too_much_for_batch:]
+                complete_dataset_list_to_predict = self.files_from_last_run + fast_processing_dataset[too_much_for_batch:]
                 self.files_from_last_run = fast_processing_dataset[:too_much_for_batch]
-                predictions, wav_filenames = self.predict_fast(ready_dataset_list_to_predict, create_model)
+                predictions, wav_filenames = self.predict_fast(complete_dataset_list_to_predict, create_model)
                 self.get_prediction_and_save_json(predictions, wav_filenames)
                 files_processed = True
             if package_processing_dataset and not FLAGS.process_in_sequence:
@@ -166,7 +166,8 @@ class Worker:
         to_process_with_package = []
         fast_process = []
         for x in dataset_list:
-            if x['wav_filesize'] > FLAGS.package_larger_than:
+            wav_filesize = x[1]
+            if wav_filesize > FLAGS.package_larger_than:
                 to_process_with_package.append(x)
             else:
                 fast_process.append(x)
@@ -186,13 +187,14 @@ class Worker:
                     msg = queue_in.get()
 
                     filename = msg['filename']
+                    target_transcript = msg['transcript']  # dummy
                     fin = wave.open(filename, 'rb')
                     audio = np.frombuffer(fin.readframes(fin.getnframes()), np.int16)
                     fin.close()
 
                     decoded = ds.stt(audio)
 
-                    queue_out.put({'wav': filename, 'prediction': decoded, 'ground_truth': msg['transcript']})
+                    queue_out.put({'wav': filename, 'prediction': decoded, 'ground_truth': target_transcript})
                 except FileNotFoundError as ex:
                     print('FileNotFoundError: ', ex)
 
@@ -213,7 +215,7 @@ class Worker:
             self.processes.append(worker_process)
 
         for row in dataset_list:
-            self.work_todo.put({'filename': row['wav_filename'], 'transcript': row['transcript']})
+            self.work_todo.put({'filename': row[0], 'transcript': row[2]})  # row[2] - dummy target transcript
 
     def get_package_processing_results(self):
         wavlist = []
@@ -231,14 +233,15 @@ class Worker:
     def predict_fast(self, voicefile_list, create_model):
         tfv1.reset_default_graph()
 
-        dataset = create_dataset(voicefile_list, batch_size=FLAGS.worker_batch_size, train_phase=False, file_dict=True)
+        dataset = create_dataset(voicefile_list, batch_size=FLAGS.worker_batch_size, train_phase=False,
+                                 sample_list=True)
         iterator = tfv1.data.Iterator.from_structure(tfv1.data.get_output_types(dataset),
                                                      tfv1.data.get_output_shapes(dataset),
                                                      output_classes=tfv1.data.get_output_classes(dataset))
         transcribe_init_op = iterator.make_initializer(dataset)
 
         # One rate per layer
-        batch_wav_filename, (batch_x, batch_x_len), batch_y = iterator.get_next()
+        batch_wav_filename, (batch_x, batch_x_len), _ = iterator.get_next()
         no_dropout = [None] * 6
         logits, _ = create_model(batch_x=batch_x,
                                  batch_size=FLAGS.worker_batch_size,
@@ -300,7 +303,7 @@ def main(_):
         log_error('flag --worker_path has to be specified. Tell which root path should be used.')
         sys.exit(1)
 
-    from deepspeech_training.train import create_model  # pylint: disable=cyclic-import,import-outside-toplevel
+    from mozilla_voice_stt_training.train import create_model  # pylint: disable=cyclic-import,import-outside-toplevel
     worker = Worker()
 
     while True:

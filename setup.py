@@ -74,7 +74,13 @@ def main():
     ]
 
     tensorflow_pypi_dep = [
-        'tensorflow == 1.15.2'
+        'tensorflow-gpu == 1.15.2'
+    ]
+
+    our_dep = [
+        'pydub',
+        'webrtcvad',
+        'mozilla-voice-stt == {}'.format(version)
     ]
 
     # Due to pip craziness environment variables are the only consistent way to
@@ -94,6 +100,7 @@ def main():
         install_requires = install_requires
     else:
         install_requires = install_requires + tensorflow_pypi_dep
+    install_requires = install_requires + our_dep
 
     setup(
         name='mozilla_voice_stt_training',
