@@ -11,14 +11,22 @@ import argparse
 BASE_ADDRESS = 'https://api.yoummday.com/files/'
 
 
+def words_to_string(words):
+    words_sorted_descending = {k: v for k, v in sorted(words.items(), reverse=True, key=lambda item: item[1])}
+    words_string = ''
+    for word, count in words_sorted_descending.items():
+        words_string += word + '\t' + str(count) + '\t'
+    return words_string.rstrip('\t')
+
+
 def results_to_tsv(result_dict):
     tsv_data = ''
     for _, value in result_dict['segments'].items():
-        if 'text' not in value:
+        if 'text' not in value or 'words' not in value:
             print("continuing")
             continue
         tsv_data += str(value["channel"]) + '\t' + str(int(value['start_time'] * 1000)) + '\t' + str(int(value['duration'] * 1000)) + '\t' + \
-                    value['text'] + '\n'
+                    value['text'] + '\t' + words_to_string(value['words']) + '\n'
     return tsv_data
 
 

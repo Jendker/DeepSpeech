@@ -36,6 +36,26 @@ from mozilla_voice_stt_training.util.flags import create_flags, FLAGS
 from mozilla_voice_stt_training.util.logging import log_error, log_progress, create_progressbar
 
 
+def sentence_from_candidate_transcript(metadata):
+    word = ""
+    words = []
+    # Loop through each character
+    for i, token in enumerate(metadata.tokens):
+        # Append character to word if it's not a space
+        if token.text != " ":
+            word = word + token.text
+        # Word boundary is either a space or the last character in the array
+        if token.text == " " or i == len(metadata.tokens) - 1:
+            words.append(word)
+            # Reset
+            word = ""
+    return " ".join(words)
+
+
+def predictions_from_json_output(json_output):
+    return [sentence_from_candidate_transcript(transcript) for transcript in json_output.transcripts]
+
+
 class Worker:
     def __init__(self):
         check_ctcdecoder_version()
@@ -79,13 +99,34 @@ class Worker:
     def wav_filename_to_filename(wav_filename):
         return wav_filename.split('/')[-1]
 
+    @staticmethod
+    def alternatives_to_words(alternatives):
+        all_words = {}
+        for alternative in alternatives:
+            words = alternative.split(' ')
+            words = set(words)
+            for word in words:
+                if word in all_words:
+                    all_words[word] += 1
+                else:
+                    all_words[word] = 1
+        for word, count in all_words.items():
+            all_words[word] = count / len(alternatives)
+        return all_words
+
     def get_prediction_and_save_json(self, predictions, wav_filenames):
-        for prediction, wav_filename in zip(predictions, wav_filenames):
+        for prediction_alternatives, wav_filename in zip(predictions, wav_filenames):
             id = self.wav_filename_to_id(wav_filename)
             id_result = self.results_to_save[id]
             filename = self.wav_filename_to_filename(wav_filename)
-            if prediction:
-                id_result['segments'][filename]['text'] = prediction
+            if prediction_alternatives:
+                best_text = prediction_alternatives[0]
+                if best_text:
+                    words = self.alternatives_to_words(prediction_alternatives)
+                else:
+                    words = {}
+                id_result['segments'][filename]['text'] = best_text
+                id_result['segments'][filename]['words'] = words
             else:
                 del id_result['segments'][filename]
         ids_saved = []
@@ -192,9 +233,9 @@ class Worker:
                     audio = np.frombuffer(fin.readframes(fin.getnframes()), np.int16)
                     fin.close()
 
-                    decoded = ds.stt(audio)
+                    prediction_alternatives = predictions_from_json_output(ds.sttWithMetadata(audio, num_results=beam_width))
 
-                    queue_out.put({'wav': filename, 'prediction': decoded, 'ground_truth': target_transcript})
+                    queue_out.put({'wav': filename, 'prediction_alternatives': prediction_alternatives, 'ground_truth': target_transcript})
                 except FileNotFoundError as ex:
                     print('FileNotFoundError: ', ex)
 
@@ -226,7 +267,7 @@ class Worker:
 
         while not self.work_done.empty():
             msg = self.work_done.get()
-            predictions.append(msg['prediction'])
+            predictions.append(msg['prediction_alternatives'])
             wavlist.append(msg['wav'])
         return predictions, wavlist
 
@@ -274,11 +315,15 @@ class Worker:
 
                     decoded = ctc_beam_search_decoder_batch(batch_logits, batch_lengths, Config.alphabet, FLAGS.beam_width,
                                                             num_processes=self.num_processes, scorer=self.scorer,
-                                                            cutoff_prob=FLAGS.cutoff_prob, cutoff_top_n=FLAGS.cutoff_top_n)
+                                                            cutoff_prob=FLAGS.cutoff_prob, cutoff_top_n=FLAGS.cutoff_top_n,
+                                                            num_results=FLAGS.beam_width)
                     for wav_filename, d in zip(batch_wav_filenames, decoded):
                         wav_filename = wav_filename.decode('UTF-8')
-                        prediction = d[0][1]
-                        predictions.append(prediction)
+                        prediction_alternatives = []
+                        for prediction_alternative in d:
+                            prediction = prediction_alternative[1]
+                            prediction_alternatives.append(prediction)
+                        predictions.append(prediction_alternatives)
                         wav_filenames.append(wav_filename)
                     step_count += 1
                     bar.update(step_count)
